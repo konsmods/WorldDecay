@@ -24,8 +24,17 @@ WDecay_Fences.NOT_BROKE_AND_BENDABLE_FENCE = NOT_BROKE_AND_BENDABLE_FENCE
 WDecay_Fences.BROKEN_FENCE = BROKEN_FENCE
 WDecay_Fences.BENDABLE_FENCE = BENDABLE_FENCE
 
+--Skip B42 entity fences, BrokenFences/BentFences aren't built for them.
+--Map may no longer place sprite-based fences at all - keeping just in case.
+local function isEntityObject(obj)
+    local class = obj:getClass()
+    return class ~= nil and class:getSimpleName() == "IsoEntity"
+end
+
 function WDecay_Fences.getFenceProperty(obj)
-    if classBentFences:isBentObject(obj) then
+    if isEntityObject(obj) then
+        return NOT_BROKE_AND_BENDABLE_FENCE
+    elseif classBentFences:isBentObject(obj) then
         return BENDABLE_FENCE
     elseif classBrokenFences:isBreakableObject(obj) then
         return BROKEN_FENCE
