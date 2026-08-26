@@ -1,0 +1,1168 @@
+require('luautils')
+
+local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
+local WDecay_Random = require('wdecay_random/wdecay_random')
+local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_Carry = require('wdecay_carry/wdecay_carry')
+local WDecay_Placement = require('wdecay_placement/wdecay_placement')
+local WDecay_Trees = require('WDecay_Trees/WDecay_Trees')
+local WDecay_Bushes = require('WDecay_Bushes/WDecay_Bushes')
+local WDecay_Grass = require('WDecay_Grass/WDecay_Grass')
+
+local CACHE_VERSION = 3
+local DEBUG_MODE = false
+
+local seenChunks = {}
+local modDataTable = nil
+
+local chunkQueueTailHigh = 0
+local chunkQueueTailLow = 0
+local chunkQueueHeadHigh = 1
+local chunkQueueHeadLow = 1
+local chunkQueueHighChunks = {}
+local chunkQueueHighKeys = {}
+local chunkQueueHighWx = {}
+local chunkQueueHighWy = {}
+local chunkQueueLowChunks = {}
+local chunkQueueLowKeys = {}
+local chunkQueueLowWx = {}
+local chunkQueueLowWy = {}
+local PRIORITY_RADIUS = 5
+local pendingChunks = {}
+local chunkWork = {}
+
+local TIME_BUDGET_MS = 10
+local SCAN_INTERVAL = 100
+local scanInterval = 100
+local scanIntervalSet = false
+local SCAN_RADIUS = 15
+local scanTimer = 0
+local debugTickCounter = 0
+
+local spawnX = nil
+local spawnY = nil
+local spawnAttempts = 0
+local MAX_SPAWN_ATTEMPTS = 5
+
+local SEEN_CHUNKS_MAX = 20000
+local seenChunksCount = 0
+
+local dispatcherConfigLoaded = false
+local function loadDispatcherConfig()
+    local function getInt(name, default)
+        local opt = getSandboxOptions():getOptionByName('WDecay.' .. name)
+        return opt and opt:getValue() or default
+    end
+
+    local function getBool(name, default)
+        local opt = getSandboxOptions():getOptionByName('WDecay.' .. name)
+        if opt then return opt:getValue() end
+
+        return default
+    end
+
+    TIME_BUDGET_MS = getInt('timeBudgetMs', 10)
+    SCAN_INTERVAL = getInt('scanInterval', 100)
+    SCAN_RADIUS = getInt('scanRadius', 15)
+    PRIORITY_RADIUS = getInt('priorityRadius', 5)
+    DEBUG_MODE = getBool('debugMode', false)
+    dispatcherConfigLoaded = true
+    if DEBUG_MODE then
+        WDecay_Scaling.printStatus()
+    end
+end
+
+local perfTickCounter = 0
+
+local function GenerateKey(wx, wy)
+    return wx .. ":" .. wy
+end
+
+local function markSeen(key)
+    if seenChunks[key] then return end
+    if seenChunksCount >= SEEN_CHUNKS_MAX then
+        for oldKey in pairs(seenChunks) do
+            seenChunks[oldKey] = nil
+            if modDataTable then modDataTable[oldKey] = nil end
+            seenChunksCount = seenChunksCount - 1
+            break
+        end
+    end
+    seenChunks[key] = true
+    seenChunksCount = seenChunksCount + 1
+    if modDataTable then modDataTable[key] = true end
+end
+
+local function runGenerator(fn, square, checkResult, level, category, index)
+    local ok, result = pcall(fn, square, checkResult, level)
+    if not ok then
+        print("[WDecay] " .. category .. " generator " .. index .. " error at " .. square:getX() .. "," .. square:getY() .. "," .. square:getZ() .. ": " .. tostring(result):sub(1, 120))
+        return false, false
+    end
+    return true, result == true
+end
+
+local function dispatchGenerators(square, checkResult, level)
+    local allSucceeded = true
+    if WDecay_PlacementGenerators then
+        for i = 1, #WDecay_PlacementGenerators do
+            local fn = WDecay_PlacementGenerators[i]
+            if fn then
+                local ok, placed = runGenerator(fn, square, checkResult, level, "placement", i)
+                if not ok then allSucceeded = false end
+                if placed then
+                    if WDecay_DebugCountPlacement then WDecay_DebugCountPlacement(i) end
+                    break
+                end
+            end
+        end
+    end
+    if WDecay_ModifierGenerators then
+        for i = 1, #WDecay_ModifierGenerators do
+            local fn = WDecay_ModifierGenerators[i]
+            if fn then
+                local ok = runGenerator(fn, square, checkResult, level, "modifier", i)
+                if not ok then allSucceeded = false end
+            end
+        end
+    end
+    return allSucceeded
+end
+
+local function snapshotObjects(square)
+    local existing = {}
+    local objects = square:getObjects()
+    if objects then
+        for i = 0, objects:size() - 1 do existing[objects:get(i)] = true end
+    end
+    return existing
+end
+
+local function recordNewPlacements(markerData, square, checkResult, existing)
+    local objects = square:getObjects()
+    if not objects then return end
+    for i = 0, objects:size() - 1 do
+        local object = objects:get(i)
+        if object and not existing[object] then
+            local modData = object:getModData()
+            local cleanableType = modData and modData["WDecay_Cleanable"]
+            local key = nil
+            if cleanableType == "tree" then
+                key = checkResult.isRoad and "WDecay_placedTreesRoad" or "WDecay_placedTreesNatural"
+            elseif cleanableType == "bush" then
+                if checkResult.isIndoor then
+                    key = "WDecay_placedBushesIndoor"
+                else
+                    key = checkResult.isRoad and "WDecay_placedBushesRoad" or "WDecay_placedBushesNatural"
+                end
+            elseif cleanableType == "grass" then
+                key = "WDecay_placedIndoorGrass"
+            end
+            if key then markerData[key] = (markerData[key] or 0) + 1 end
+        end
+    end
+end
+
+local WDecay_SquareCheck = require('wdecay_squarecheck/wdecay_squarecheck')
+
+local cachedSquareCheck = WDecay_SquareCheck.checkAll
+
+local function getMarkerSquare(chunk)
+    local square = chunk:getGridSquare(0, 0, 0)
+    if square then return square end
+
+    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
+        square = chunk:getGridSquare(0, 0, z)
+        if square then return square end
+    end
+
+    return nil
+end
+
+local function isChunkMarkedDone(square)
+    return square ~= nil and square:getModData()["WDecay_done"] == CACHE_VERSION
+end
+
+local function needsRedecay(square, cachedDays)
+    if square == nil then return false end
+
+    if not WDecay_Scaling.isRedecayEnabled() then return false end
+
+    local days = cachedDays
+    if days == nil then days = WDecay_Scaling.getWorldAgeDays() end
+    if not days then return false end
+
+    local modData = square:getModData()
+    local doneAt = modData["WDecay_doneAtDays"]
+    if doneAt == nil then
+        return true
+    end
+
+    return (days - doneAt) >= WDecay_Scaling.getRedecayThresholdDays()
+end
+
+local function squareHasSprite(square, prefixes, cleanableType, objects)
+    objects = objects or square:getObjects()
+    if not objects then return false end
+
+    for i = 0, objects:size() - 1 do
+        local obj = objects:get(i)
+        if obj then
+            local modData = obj:getModData()
+            if modData and cleanableType and modData["WDecay_Cleanable"] == cleanableType then
+                return true
+            end
+
+            local spriteName = obj:getSpriteName()
+            if spriteName then
+                for p = 1, #prefixes do
+                    if luautils.stringStarts(spriteName, prefixes[p]) then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+local carryCategories = {
+    {
+        scaleCategory = "nature",
+        eligKey = "WDecay_eligTreesNatural",
+        carryKey = "WDecay_carryTreesNatural",
+        placedKey = "WDecay_placedTreesNatural",
+        eligible = function(checkResult, level)
+            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
+        end,
+        hasExisting = function(square, objects)
+            return squareHasSprite(square, { "e_americanholly", "e_canadianhemlock", "e_virginiapine" }, "tree", objects)
+        end,
+        basePercent = function() return WDecay_Trees.getBasePercentage() end,
+        place = function(square)
+            if not WDecay_Placement.isSafe(square) then return false end
+            return WDecay_Placement.createTagged(square, WDecay_Trees.getRandomTreeSprite(), "tree")
+        end,
+    },
+    {
+        scaleCategory = "nature",
+        eligKey = "WDecay_eligTreesRoad",
+        carryKey = "WDecay_carryTreesRoad",
+        placedKey = "WDecay_placedTreesRoad",
+        eligible = function(checkResult, level)
+            return level == 0 and checkResult and not checkResult.cleaned
+                and checkResult.isRoad == true and WDecay_Trees.getBasePercentageOnRoad() > 0
+        end,
+        hasExisting = function(square, objects)
+            return squareHasSprite(square, { "e_americanholly", "e_canadianhemlock", "e_virginiapine" }, "tree", objects)
+        end,
+        basePercent = function() return WDecay_Trees.getBasePercentageOnRoad() end,
+        place = function(square)
+            if not WDecay_Placement.isSafe(square) then return false end
+            return WDecay_Placement.createTagged(square, WDecay_Trees.getRandomTreeSprite(), "tree")
+        end,
+    },
+    {
+        scaleCategory = "nature",
+        eligKey = "WDecay_eligBushesNatural",
+        carryKey = "WDecay_carryBushesNatural",
+        placedKey = "WDecay_placedBushesNatural",
+        eligible = function(checkResult, level)
+            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
+        end,
+        basePercent = function() return WDecay_Bushes.getBasePercentage() end,
+        hasExisting = function(square, objects)
+            return squareHasSprite(square, { "f_bushes_" }, "bush", objects)
+        end,
+        place = function(square)
+            if not WDecay_Placement.isSafe(square) then return false end
+            return WDecay_Placement.createTagged(square, WDecay_Bushes.getRandomBush(), "bush")
+        end,
+    },
+    {
+        scaleCategory = "nature",
+        eligKey = "WDecay_eligBushesRoad",
+        carryKey = "WDecay_carryBushesRoad",
+        placedKey = "WDecay_placedBushesRoad",
+        eligible = function(checkResult, level)
+            return level == 0 and checkResult and not checkResult.cleaned
+                and checkResult.isRoad == true and WDecay_Bushes.getBasePercentageOnRoad() > 0
+        end,
+        basePercent = function() return WDecay_Bushes.getBasePercentageOnRoad() end,
+        hasExisting = function(square, objects)
+            return squareHasSprite(square, { "f_bushes_" }, "bush", objects)
+        end,
+        place = function(square)
+            if not WDecay_Placement.isSafe(square) then return false end
+            return WDecay_Placement.createTagged(square, WDecay_Bushes.getRandomBush(), "bush")
+        end,
+    },
+    {
+        scaleCategory = "nature",
+        eligKey = "WDecay_eligBushesIndoor",
+        carryKey = "WDecay_carryBushesIndoor",
+        placedKey = "WDecay_placedBushesIndoor",
+        scanAllLevels = true,
+        eligible = function(checkResult, level)
+            if not checkResult or checkResult.cleaned then return false end
+            if level ~= 0 then return checkResult.hasRoof == true and checkResult.isIndoor == true end
+            return checkResult.isIndoor == true and WDecay_Bushes.getIndoorBasePercentage() > 0
+        end,
+        basePercent = function() return WDecay_Bushes.getIndoorBasePercentage() end,
+        hasExisting = function(square, objects)
+            return squareHasSprite(square, { "f_bushes_" }, "bush", objects)
+        end,
+        place = function(square)
+            if not WDecay_Placement.isSafe(square) then return false end
+            return WDecay_Placement.createTagged(square, WDecay_Bushes.getRandomBush(), "bush")
+        end,
+    },
+    {
+        scaleCategory = "nature",
+        eligKey = "WDecay_eligIndoorGrass",
+        carryKey = "WDecay_carryIndoorGrass",
+        placedKey = "WDecay_placedIndoorGrass",
+        eligible = function(checkResult, level)
+            return level == 0 and checkResult and not checkResult.cleaned
+                and checkResult.isGoodSquare == true and checkResult.isIndoor == true
+                and WDecay_Grass.getIndoorBasePercentage() > 0
+        end,
+        basePercent = function() return WDecay_Grass.getIndoorBasePercentage() end,
+        hasExisting = function(square, objects)
+            return squareHasSprite(square, { "e_newgrass_", "d_generic_", "d_plants_" }, "grass", objects)
+        end,
+        place = function(square)
+            if not WDecay_Placement.isSafe(square) then return false end
+            return WDecay_Placement.createTagged(square, WDecay_Grass.getRandomVanillaGrass(), "grass")
+        end,
+    },
+}
+
+local carryNeedsAllLevels = false
+for c = 1, #carryCategories do
+    if carryCategories[c].scanAllLevels then
+        carryNeedsAllLevels = true
+        break
+    end
+end
+
+local function recordEligibility(markerData, checkResult, level)
+    for c = 1, #carryCategories do
+        local cat = carryCategories[c]
+        if cat.eligible(checkResult, level) then
+            markerData[cat.eligKey] = (markerData[cat.eligKey] or 0) + 1
+        end
+    end
+
+    if checkResult.isUrban == true and markerData["WDecay_hasUrban"] ~= true then
+        markerData["WDecay_hasUrban"] = true
+    end
+end
+
+local function runCarryModifier(fn, square, checkResult, level, name)
+    if not fn then return true end
+    local ok, err = pcall(fn, square, checkResult, level)
+    if not ok then
+        print("[WDecay] carry " .. name .. " error at " .. square:getX() .. "," .. square:getY() .. "," .. square:getZ() .. ": " .. tostring(err):sub(1, 120))
+        return false
+    end
+    return true
+end
+
+local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDays, deadline)
+    local state = chunkWork[key]
+    if not state or state.mode ~= "carry" then
+        local nowDays = WDecay_Scaling.getWorldAgeDays() or doneAtDays
+        local pending = nil
+        local pendingCarry = {}
+        for c = 1, #carryCategories do
+            local cat = carryCategories[c]
+            local eligibleCount = markerData[cat.eligKey] or 0
+            if eligibleCount > 0 then
+                local basePercent = cat.basePercent({ isNatural = true })
+                if basePercent > 0 then
+                    local multBefore = WDecay_Scaling.getMultiplierForDaysCategory(doneAtDays, cat.scaleCategory)
+                    local multNow = WDecay_Scaling.getMultiplierForDaysCategory(nowDays, cat.scaleCategory)
+                    if not WDecay_Scaling.isTimeScalingEnabled() then multBefore = 0 end
+                    local maxObjects = math.floor(eligibleCount * (basePercent / 100) * multNow + 0.5)
+                    local placed = markerData[cat.placedKey] or 0
+                    local toPlace, remainder = WDecay_Carry.preview(markerData, cat.carryKey, eligibleCount, basePercent, multBefore, multNow, maxObjects, placed)
+                    pendingCarry[c] = remainder
+                    if toPlace > 0 then
+                        if not pending then pending = {} end
+                        pending[c] = toPlace
+                    end
+                end
+            end
+        end
+        local doVines = WDecay_Vines_ApplyToSquare ~= nil
+        local doUrban = markerData["WDecay_hasUrban"] == true
+        local positionsByCat = nil
+        if pending then
+            positionsByCat = {}
+            for c in pairs(pending) do positionsByCat[c] = {} end
+        end
+        local needAllLevels = doVines or doUrban
+        if pending and carryNeedsAllLevels and not needAllLevels then
+            for c in pairs(pending) do
+                if carryCategories[c].scanAllLevels then
+                    needAllLevels = true
+                    break
+                end
+            end
+        end
+        local minZ = needAllLevels and chunk:getMinLevel() or 0
+        local maxZ = needAllLevels and chunk:getMaxLevel() or 0
+        state = {
+            mode = "carry",
+            markerZ = markerSquare:getZ(),
+            markerData = markerData,
+            doneAtDays = doneAtDays,
+            nowDays = nowDays,
+            pending = pending,
+            positionsByCat = positionsByCat,
+            pendingCarry = pendingCarry,
+            finalElig = {},
+            doVines = doVines,
+            doUrban = doUrban,
+            phase = "scan",
+            minZ = minZ,
+            maxZ = maxZ,
+            z = minZ,
+            y = 0,
+            x = 0,
+            wx = math.floor(markerSquare:getX() / 8),
+            wy = math.floor(markerSquare:getY() / 8),
+            catIndex = 1
+        }
+        chunkWork[key] = state
+    end
+
+    if state.phase == "scan" then
+        WDecay_Scaling.setRedecayContext(state.doneAtDays)
+        while state.z <= state.maxZ do
+            if deadline and getTimestampMs() >= deadline then
+                WDecay_Scaling.clearRedecayContext()
+                return "pending"
+            end
+            local square = chunk:getGridSquare(state.x, state.y, state.z)
+            if square then
+                local salt = state.doneAtDays + (state.z - state.minZ) * 64 + state.y * 8 + state.x
+                WDecay_Random.reseedForChunk(state.wx, state.wy, salt)
+                local checkResult = cachedSquareCheck(square, state.z)
+                if checkResult then
+                    if state.pending then
+                        for c in pairs(state.pending) do
+                            if carryCategories[c].eligible(checkResult, state.z) then
+                                local list = state.positionsByCat[c]
+                                list[#list + 1] = square
+                            end
+                        end
+                    end
+                    if state.doVines and not runCarryModifier(WDecay_Vines_ApplyToSquare, square, checkResult, state.z, "vines") then state.failed = true end
+                    if state.doUrban then
+                        if not runCarryModifier(WDecay_Walls_ApplyToSquare, square, checkResult, state.z, "walls") then state.failed = true end
+                        if not runCarryModifier(WDecay_Barricades_ApplyToSquare, square, checkResult, state.z, "barricades") then state.failed = true end
+                        if not runCarryModifier(WDecay_Fences_ApplyToSquare, square, checkResult, state.z, "fences") then state.failed = true end
+                        if not runCarryModifier(WDecay_Destroyed_ApplyToSquare, square, checkResult, state.z, "destroyed") then state.failed = true end
+                    end
+                end
+            end
+            state.x = state.x + 1
+            if state.x > 7 then
+                state.x = 0
+                state.y = state.y + 1
+                if state.y > 7 then
+                    state.y = 0
+                    state.z = state.z + 1
+                end
+            end
+        end
+        WDecay_Scaling.clearRedecayContext()
+        if state.failed then
+            chunkWork[key] = nil
+            return false
+        end
+        state.phase = "place"
+    end
+
+    while state.catIndex <= #carryCategories do
+        if deadline and getTimestampMs() >= deadline then return "pending" end
+        local c = state.catIndex
+        local toPlace = state.pending and state.pending[c]
+        if toPlace then
+            local cat = carryCategories[c]
+            local positions = state.positionsByCat[c]
+            if state.placeRemaining == nil then
+                state.placeRemaining = toPlace
+                state.placeCount = #positions
+                state.placePlaced = state.markerData[cat.placedKey] or 0
+            end
+            while state.placeRemaining > 0 and state.placeCount > 0 do
+                if deadline and getTimestampMs() >= deadline then return "pending" end
+                WDecay_Random.reseedForChunk(state.wx, state.wy, state.doneAtDays + c * 100000 + state.placeRemaining)
+                local randomizer = WDecay_Random.get()
+                local pick = randomizer:random(1, state.placeCount)
+                local square = positions[pick]
+                positions[pick] = positions[state.placeCount]
+                positions[state.placeCount] = nil
+                state.placeCount = state.placeCount - 1
+                state.placeRemaining = state.placeRemaining - 1
+                if square and not (cat.hasExisting and cat.hasExisting(square)) and cat.place(square) then
+                    state.placePlaced = state.placePlaced + 1
+                    state.markerData[cat.placedKey] = state.placePlaced
+                end
+            end
+            state.markerData[cat.placedKey] = state.placePlaced
+            state.finalElig[c] = state.placeCount + state.placePlaced
+            state.placeRemaining = nil
+            state.placeCount = nil
+            state.placePlaced = nil
+        end
+        state.catIndex = state.catIndex + 1
+    end
+
+    if state.failed then
+        chunkWork[key] = nil
+        return false
+    end
+    if WDecay_Overlays_RefreshQuiet then WDecay_Overlays_RefreshQuiet() end
+    if WDecay_Overlays_ApplyToChunk then WDecay_Overlays_ApplyToChunk(chunk) end
+    for c = 1, #carryCategories do
+        local cat = carryCategories[c]
+        local carryValue = state.pendingCarry[c]
+        if carryValue ~= nil then state.markerData[cat.carryKey] = carryValue end
+        local eligibleValue = state.finalElig[c]
+        if eligibleValue ~= nil then state.markerData[cat.eligKey] = eligibleValue end
+    end
+    if state.nowDays then state.markerData["WDecay_doneAtDays"] = math.floor(state.nowDays) end
+    state.markerData["WDecay_done"] = CACHE_VERSION
+    chunkWork[key] = nil
+    if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
+        WDecay_Debug.totalChunksProcessed = WDecay_Debug.totalChunksProcessed + 1
+    end
+    return true
+end
+
+local function processChunkSquares(chunk, key, deadline)
+    local state = chunkWork[key]
+    if not state then
+        local minLevel = chunk:getMinLevel()
+        local maxLevel = chunk:getMaxLevel()
+        local markerSquare = nil
+        local z = minLevel
+        while z <= maxLevel do
+            markerSquare = chunk:getGridSquare(0, 0, z)
+            if markerSquare and markerSquare:getChunk() then break end
+            markerSquare = nil
+            z = z + 1
+        end
+        if not markerSquare then return false end
+        local markerData = markerSquare:getModData()
+        local doneAtDays = nil
+        if markerData["WDecay_done"] == CACHE_VERSION then
+            doneAtDays = markerData["WDecay_doneAtDays"]
+        end
+        if doneAtDays == nil then
+            for i = 1, #carryCategories do
+                markerData[carryCategories[i].eligKey] = 0
+                markerData[carryCategories[i].placedKey] = 0
+            end
+            markerData["WDecay_hasUrban"] = nil
+        end
+        WDecay_Random.reseedForChunk(math.floor(markerSquare:getX() / 8), math.floor(markerSquare:getY() / 8), doneAtDays)
+        if doneAtDays ~= nil then
+            return processChunkCarry(chunk, key, markerSquare, markerData, doneAtDays, deadline)
+        end
+        state = {
+            minLevel = minLevel,
+            maxLevel = maxLevel,
+            z = minLevel,
+            y = 0,
+            x = 0,
+            wx = math.floor(markerSquare:getX() / 8),
+            wy = math.floor(markerSquare:getY() / 8),
+            markerZ = z,
+            markerData = markerData,
+            startedAt = DEBUG_MODE and getTimestampMs() or 0
+        }
+        chunkWork[key] = state
+    else
+        local markerSquare = chunk:getGridSquare(0, 0, state.markerZ)
+        if chunk.wx ~= state.wx or chunk.wy ~= state.wy or not markerSquare or not markerSquare:getChunk()
+            or math.floor(markerSquare:getX() / 8) ~= state.wx or math.floor(markerSquare:getY() / 8) ~= state.wy
+            or markerSquare:getModData() ~= state.markerData then
+            chunkWork[key] = nil
+            return false
+        end
+        if state.mode == "carry" then
+            return processChunkCarry(chunk, key, markerSquare, state.markerData, state.doneAtDays, deadline)
+        end
+    end
+
+    WDecay_Scaling.setRedecayContext(nil)
+    while state.z <= state.maxLevel do
+        if deadline and getTimestampMs() >= deadline then
+            WDecay_Scaling.clearRedecayContext()
+            return "pending"
+        end
+        local square = chunk:getGridSquare(state.x, state.y, state.z)
+        if square then
+            local salt = (state.z - state.minLevel) * 64 + state.y * 8 + state.x
+            WDecay_Random.reseedForChunk(state.wx, state.wy, salt)
+            local checkResult = cachedSquareCheck(square, state.z)
+            if checkResult then
+                local existingObjects = snapshotObjects(square)
+                recordEligibility(state.markerData, checkResult, state.z)
+                if not dispatchGenerators(square, checkResult, state.z) then state.failed = true end
+                recordNewPlacements(state.markerData, square, checkResult, existingObjects)
+            end
+        end
+        state.x = state.x + 1
+        if state.x > 7 then
+            state.x = 0
+            state.y = state.y + 1
+            if state.y > 7 then
+                state.y = 0
+                state.z = state.z + 1
+            end
+        end
+    end
+
+    WDecay_Scaling.clearRedecayContext()
+    if state.failed then
+        chunkWork[key] = nil
+        return false
+    end
+    state.markerData["WDecay_done"] = CACHE_VERSION
+    local nowDays = WDecay_Scaling.getWorldAgeDays()
+    if nowDays then state.markerData["WDecay_doneAtDays"] = math.floor(nowDays) end
+    chunkWork[key] = nil
+    if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
+        WDecay_Debug.totalChunksProcessed = WDecay_Debug.totalChunksProcessed + 1
+    end
+    if DEBUG_MODE and WDecay_Debug and WDecay_Debug.totalChunkTimeMs then
+        WDecay_Debug.totalChunkTimeMs = WDecay_Debug.totalChunkTimeMs + getTimestampMs() - state.startedAt
+    end
+    return true
+end
+
+local patchedFunction = processChunkSquares
+
+local function debugProcessChunkSquares(chunk, key, deadline)
+    WD_Debug_Metric.startTimeMeasurement("processChunkSquares")
+    local result = patchedFunction(chunk, key, deadline)
+    WD_Debug_Metric.endTimeMeasurement("processChunkSquares")
+    return result
+end
+
+if isDebugEnabled() then
+    processChunkSquares = debugProcessChunkSquares
+end
+
+local function enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
+    local chunk = sq:getChunk()
+    if not chunk then return 0 end
+
+    pendingChunks[key] = true
+    local dx = (wx * 8 + 4) - worldX
+    local dy = (wy * 8 + 4) - worldY
+    local sqDistance = dx * dx + dy * dy
+    local isPriority = sqDistance <= PRIORITY_RADIUS * PRIORITY_RADIUS * 64
+    if isPriority then
+        chunkQueueTailHigh = chunkQueueTailHigh + 1
+        chunkQueueHighChunks[chunkQueueTailHigh] = chunk
+        chunkQueueHighKeys[chunkQueueTailHigh] = key
+        chunkQueueHighWx[chunkQueueTailHigh] = wx
+        chunkQueueHighWy[chunkQueueTailHigh] = wy
+    else
+        chunkQueueTailLow = chunkQueueTailLow + 1
+        chunkQueueLowChunks[chunkQueueTailLow] = chunk
+        chunkQueueLowKeys[chunkQueueTailLow] = key
+        chunkQueueLowWx[chunkQueueTailLow] = wx
+        chunkQueueLowWy[chunkQueueTailLow] = wy
+    end
+
+    return 1
+end
+
+local function ScanChunksAroundPos(worldX, worldY, radius)
+    if not modDataTable then return end
+
+    local cx0 = math.floor((worldX - radius * 8) / 8)
+    local cx1 = math.floor((worldX + radius * 8) / 8)
+    local cy0 = math.floor((worldY - radius * 8) / 8)
+    local cy1 = math.floor((worldY + radius * 8) / 8)
+    local queued = 0
+    local scanDays = WDecay_Scaling.getWorldAgeDays()
+    local redecayEnabled = WDecay_Scaling.isRedecayEnabled()
+    for wx = cx0, cx1 do
+        for wy = cy0, cy1 do
+            local key = GenerateKey(wx, wy)
+            if pendingChunks[key] then
+            elseif seenChunks[key] and redecayEnabled then
+                local sq = getSquare(wx * 8, wy * 8, 0)
+                if sq and isChunkMarkedDone(sq) and needsRedecay(sq, scanDays) then
+                    seenChunks[key] = nil
+                    seenChunksCount = seenChunksCount - 1
+                    queued = queued + enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
+                end
+            elseif not seenChunks[key] then
+                local sq = getSquare(wx * 8, wy * 8, 0)
+                if sq then
+                    local marked = isChunkMarkedDone(sq)
+                    local redecay = marked and needsRedecay(sq, scanDays)
+                    if marked and not redecay then
+                        if not redecayEnabled then
+                            markSeen(key)
+                        end
+                    else
+                        queued = queued + enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
+                    end
+                end
+            end
+        end
+    end
+
+    if DEBUG_MODE and queued > 0 then
+        print("[WDecay] Scan queued " .. queued .. " chunks around " .. worldX .. "," .. worldY)
+    end
+end
+
+local function queueChunk(chunk)
+    local wx = chunk.wx
+    local wy = chunk.wy
+    if wx == nil or wy == nil then
+        local refSquare = chunk:getGridSquare(0, 0, chunk:getMinLevel())
+        if refSquare then
+            wx = math.floor(refSquare:getX() / 8)
+            wy = math.floor(refSquare:getY() / 8)
+        else
+            return
+        end
+    end
+
+    local key = GenerateKey(wx, wy)
+    if seenChunks[key] or pendingChunks[key] then return end
+
+    local markerSquare = getMarkerSquare(chunk)
+    local marked = isChunkMarkedDone(markerSquare)
+    local redecay = marked and needsRedecay(markerSquare)
+    if marked and not redecay then
+        if not WDecay_Scaling.isRedecayEnabled() then
+            markSeen(key)
+        end
+        return
+    end
+
+    pendingChunks[key] = true
+    local targetDist = 999999
+    local cx, cy = wx * 8 + 4, wy * 8 + 4
+    if spawnX and spawnY then
+        local dx = cx - spawnX
+        local dy = cy - spawnY
+        targetDist = dx * dx + dy * dy
+    end
+
+    if targetDist <= PRIORITY_RADIUS * PRIORITY_RADIUS * 64 then
+        chunkQueueTailHigh = chunkQueueTailHigh + 1
+        chunkQueueHighChunks[chunkQueueTailHigh] = chunk
+        chunkQueueHighKeys[chunkQueueTailHigh] = key
+        chunkQueueHighWx[chunkQueueTailHigh] = wx
+        chunkQueueHighWy[chunkQueueTailHigh] = wy
+    else
+        chunkQueueTailLow = chunkQueueTailLow + 1
+        chunkQueueLowChunks[chunkQueueTailLow] = chunk
+        chunkQueueLowKeys[chunkQueueTailLow] = key
+        chunkQueueLowWx[chunkQueueTailLow] = wx
+        chunkQueueLowWy[chunkQueueTailLow] = wy
+    end
+end
+
+local function initModDataCache()
+    modDataTable = ModData.getOrCreate("WDecay_ChunkCache")
+    if not modDataTable then return end
+
+    if not modDataTable._version or modDataTable._version ~= CACHE_VERSION then
+        local keysToClear = {}
+        for k in pairs(modDataTable) do
+            if k ~= "_seed" then
+                keysToClear[#keysToClear + 1] = k
+            end
+        end
+
+        for i = 1, #keysToClear do
+            modDataTable[keysToClear[i]] = nil
+        end
+
+        modDataTable._version = CACHE_VERSION
+        seenChunks = {}
+        seenChunksCount = 0
+        if DEBUG_MODE then
+            print("[WDecay] Chunk cache initialized")
+        end
+    else
+        local count = 0
+        for k, v in pairs(modDataTable) do
+            if k ~= "_version" and k ~= "_seed" and v then
+                seenChunks[k] = true
+                seenChunksCount = seenChunksCount + 1
+                count = count + 1
+            end
+        end
+
+        if DEBUG_MODE then
+            print("[WDecay] Chunk cache loaded: " .. count .. " legacy seen chunks")
+        end
+    end
+
+    if not modDataTable._seed then
+        modDataTable._seed = ZombRand(1, 2147483647)
+    end
+
+    WDecay_Random.setWorldSalt(modDataTable._seed)
+    scanTimer = scanInterval
+end
+
+local function requeueChunkWork(chunk, key, wx, wy, lowPriority)
+    if lowPriority then
+        chunkQueueTailLow = chunkQueueTailLow + 1
+        chunkQueueLowChunks[chunkQueueTailLow] = chunk
+        chunkQueueLowKeys[chunkQueueTailLow] = key
+        chunkQueueLowWx[chunkQueueTailLow] = wx
+        chunkQueueLowWy[chunkQueueTailLow] = wy
+    else
+        chunkQueueTailHigh = chunkQueueTailHigh + 1
+        chunkQueueHighChunks[chunkQueueTailHigh] = chunk
+        chunkQueueHighKeys[chunkQueueTailHigh] = key
+        chunkQueueHighWx[chunkQueueTailHigh] = wx
+        chunkQueueHighWy[chunkQueueTailHigh] = wy
+    end
+end
+
+local function runQueuedChunk(chunk, key, wx, wy, lowPriority, deadline)
+    if not chunk or not pendingChunks[key] then return end
+    -- ponytail: wx/wy captured at enqueue time; IsoChunk proxy may reset across ticks
+    local ok, result = pcall(processChunkSquares, chunk, key, deadline)
+    if not ok then
+        WDecay_Scaling.clearRedecayContext()
+        pendingChunks[key] = nil
+        chunkWork[key] = nil
+        if WDecay_DebugCountChunk then WDecay_DebugCountChunk(false) end
+        print("[WDecay] Chunk " .. key .. " error: " .. tostring(result):sub(1, 120))
+    elseif result == "pending" then
+        requeueChunkWork(chunk, key, wx, wy, lowPriority)
+    else
+        pendingChunks[key] = nil
+        if WDecay_DebugCountChunk then WDecay_DebugCountChunk(result == true) end
+        if result then markSeen(key) end
+    end
+end
+
+local function processNextQueuedChunk(highPriority, deadline)
+    local chunk = nil
+    local key = nil
+    local wx = nil
+    local wy = nil
+    if highPriority then
+        if chunkQueueHeadHigh > chunkQueueTailHigh then return false end
+        chunk = chunkQueueHighChunks[chunkQueueHeadHigh]
+        key = chunkQueueHighKeys[chunkQueueHeadHigh]
+        wx = chunkQueueHighWx[chunkQueueHeadHigh]
+        wy = chunkQueueHighWy[chunkQueueHeadHigh]
+        chunkQueueHighChunks[chunkQueueHeadHigh] = nil
+        chunkQueueHighKeys[chunkQueueHeadHigh] = nil
+        chunkQueueHighWx[chunkQueueHeadHigh] = nil
+        chunkQueueHighWy[chunkQueueHeadHigh] = nil
+        chunkQueueHeadHigh = chunkQueueHeadHigh + 1
+        if DEBUG_MODE and WDecay_Debug and WDecay_Debug.chunksHigh then WDecay_Debug.chunksHigh = WDecay_Debug.chunksHigh + 1 end
+    else
+        if chunkQueueHeadLow > chunkQueueTailLow then return false end
+        chunk = chunkQueueLowChunks[chunkQueueHeadLow]
+        key = chunkQueueLowKeys[chunkQueueHeadLow]
+        wx = chunkQueueLowWx[chunkQueueHeadLow]
+        wy = chunkQueueLowWy[chunkQueueHeadLow]
+        chunkQueueLowChunks[chunkQueueHeadLow] = nil
+        chunkQueueLowKeys[chunkQueueHeadLow] = nil
+        chunkQueueLowWx[chunkQueueHeadLow] = nil
+        chunkQueueLowWy[chunkQueueHeadLow] = nil
+        chunkQueueHeadLow = chunkQueueHeadLow + 1
+        if DEBUG_MODE and WDecay_Debug and WDecay_Debug.chunksLow then WDecay_Debug.chunksLow = WDecay_Debug.chunksLow + 1 end
+    end
+    if chunk then runQueuedChunk(chunk, key, wx, wy, not highPriority, deadline) end
+    return true
+end
+
+local function OnTick()
+    if isClient() then return end
+
+    if not dispatcherConfigLoaded then
+        loadDispatcherConfig()
+    end
+
+    if DEBUG_MODE then
+        perfTickCounter = perfTickCounter + 1
+        if perfTickCounter >= 300 then
+            perfTickCounter = 0
+            if WDecay_Debug and WDecay_Debug.printPerfSummary then
+                WDecay_Debug.printPerfSummary(debugTickCounter)
+            end
+        end
+    end
+
+    if not modDataTable then
+        initModDataCache()
+    end
+
+    if not scanIntervalSet and modDataTable then
+        scanInterval = SCAN_INTERVAL
+        if isMultiplayer() then
+            scanInterval = SCAN_INTERVAL * 2
+        end
+
+        scanIntervalSet = true
+    end
+
+    scanTimer = scanTimer + 1
+    if scanTimer >= scanInterval then
+        scanTimer = 0
+        if modDataTable then
+            local scannedLocal = false
+            local numPlayers = 1
+            if getNumActivePlayers then
+                numPlayers = getNumActivePlayers()
+            end
+
+            for playerIndex = 0, numPlayers - 1 do
+                local player = getSpecificPlayer(playerIndex)
+                if player then
+                    scannedLocal = true
+                    local px = math.floor(player:getX())
+                    local py = math.floor(player:getY())
+                    if px ~= 0 or py ~= 0 then
+                        if not spawnX then
+                            spawnX = px
+                            spawnY = py
+                        end
+
+                        local ok, err = pcall(ScanChunksAroundPos, px, py, SCAN_RADIUS)
+                        if not ok then
+                            print("[WDecay] Scan error: " .. tostring(err):sub(1, 120))
+                        end
+                    end
+                end
+            end
+
+            if not scannedLocal then
+                local onlinePlayers = getOnlinePlayers()
+                if onlinePlayers and onlinePlayers.size then
+                    local playerCount = onlinePlayers:size()
+                    if playerCount > 0 then
+                        for i = 0, playerCount - 1 do
+                            local p = onlinePlayers:get(i)
+                            if p then
+                                local px = math.floor(p:getX())
+                                local py = math.floor(p:getY())
+                                if px ~= 0 or py ~= 0 then
+                                    if not spawnX then
+                                        spawnX = px
+                                        spawnY = py
+                                    end
+
+                                    local ok, err = pcall(ScanChunksAroundPos, px, py, SCAN_RADIUS)
+                                    if not ok then
+                                        print("[WDecay] Scan error: " .. tostring(err):sub(1, 120))
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            if spawnX and spawnX ~= 0 and spawnAttempts < MAX_SPAWN_ATTEMPTS then
+                local radius = SCAN_RADIUS
+                if spawnAttempts < 5 then
+                    radius = SCAN_RADIUS * 2
+                end
+
+                spawnAttempts = spawnAttempts + 1
+                local ok, err = pcall(ScanChunksAroundPos, spawnX, spawnY, radius)
+                if not ok then
+                    print("[WDecay] Spawn scan error: " .. tostring(err):sub(1, 120))
+                end
+            end
+        end
+    end
+
+    if chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow then
+        chunkQueueHeadHigh = 1
+        chunkQueueTailHigh = 0
+        chunkQueueHeadLow = 1
+        chunkQueueTailLow = 0
+        return
+    end
+
+    if DEBUG_MODE then
+        debugTickCounter = debugTickCounter + 1
+        if debugTickCounter >= 30 then
+            debugTickCounter = 0
+            local highCount = chunkQueueTailHigh - chunkQueueHeadHigh + 1
+            local lowCount = chunkQueueTailLow - chunkQueueHeadLow + 1
+            print("[WDecay] Queue: high=" .. highCount .. " low=" .. lowCount)
+        end
+    end
+
+    local startMs = getTimestampMs()
+    local deadline = startMs + TIME_BUDGET_MS
+    local highDeadline = deadline
+    if chunkQueueHeadHigh <= chunkQueueTailHigh and chunkQueueHeadLow <= chunkQueueTailLow and TIME_BUDGET_MS > 1 then
+        highDeadline = startMs + math.max(1, math.floor(TIME_BUDGET_MS * 0.7))
+    end
+
+    while chunkQueueHeadHigh <= chunkQueueTailHigh and getTimestampMs() < highDeadline do
+        processNextQueuedChunk(true, highDeadline)
+    end
+    while chunkQueueHeadLow <= chunkQueueTailLow and getTimestampMs() < deadline do
+        processNextQueuedChunk(false, deadline)
+    end
+    while chunkQueueHeadHigh <= chunkQueueTailHigh and getTimestampMs() < deadline do
+        processNextQueuedChunk(true, deadline)
+    end
+
+    if chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow then
+        chunkQueueHeadHigh = 1
+        chunkQueueTailHigh = 0
+        chunkQueueHeadLow = 1
+        chunkQueueTailLow = 0
+    end
+
+end
+
+Events.OnTick.Add(OnTick)
+
+Events.OnCreatePlayer.Add(function(playerIndex, player)
+    spawnX = math.floor(player:getX())
+    spawnY = math.floor(player:getY())
+end)
+
+Events.OnInitGlobalModData.Add(function(isNewGame)
+    if not isServer() then return end
+
+    initModDataCache()
+end)
+
+Events.LoadChunk.Add(function(chunk)
+    if not isServer() then return false end
+
+    queueChunk(chunk)
+end)
+
+function WDecay_Dispatcher_IsQueueIdle()
+    return chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow
+end
+
+local function forEachChunkAround(radius, fn)
+    local player = getSpecificPlayer(0)
+    if not player then return end
+
+    local px = math.floor(player:getX())
+    local py = math.floor(player:getY())
+    local cx0 = math.floor((px - radius * 8) / 8)
+    local cx1 = math.floor((px + radius * 8) / 8)
+    local cy0 = math.floor((py - radius * 8) / 8)
+    local cy1 = math.floor((py + radius * 8) / 8)
+    for wx = cx0, cx1 do
+        for wy = cy0, cy1 do
+            local sq = getSquare(wx * 8, wy * 8, 0)
+            local chunk = sq and sq:getChunk()
+            if chunk then
+                fn(chunk, wx, wy)
+            end
+        end
+    end
+end
+
+function WDecay_Dispatcher_QueueArea(radius, wipeMarkers)
+    radius = radius or 3
+    local queued = 0
+
+    if chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow then
+        chunkQueueHeadHigh = 1
+        chunkQueueTailHigh = 0
+        chunkQueueHeadLow = 1
+        chunkQueueTailLow = 0
+    end
+
+    forEachChunkAround(radius, function(chunk, wx, wy)
+        local key = GenerateKey(wx, wy)
+        if seenChunks[key] then
+            seenChunks[key] = nil
+            seenChunksCount = seenChunksCount - 1
+        end
+        if wipeMarkers then
+            local markerSquare = getMarkerSquare(chunk)
+            if markerSquare then
+                local markerData = markerSquare:getModData()
+                markerData["WDecay_done"] = nil
+                markerData["WDecay_doneAtDays"] = nil
+                markerData["WDecay_eligTrees"] = nil
+                markerData["WDecay_carryTrees"] = nil
+                markerData["WDecay_placedTrees"] = nil
+                markerData["WDecay_eligTreesNatural"] = nil
+                markerData["WDecay_carryTreesNatural"] = nil
+                markerData["WDecay_placedTreesNatural"] = nil
+                markerData["WDecay_eligTreesRoad"] = nil
+                markerData["WDecay_carryTreesRoad"] = nil
+                markerData["WDecay_placedTreesRoad"] = nil
+                markerData["WDecay_eligBushes"] = nil
+                markerData["WDecay_carryBushes"] = nil
+                markerData["WDecay_placedBushes"] = nil
+                markerData["WDecay_eligBushesNatural"] = nil
+                markerData["WDecay_carryBushesNatural"] = nil
+                markerData["WDecay_placedBushesNatural"] = nil
+                markerData["WDecay_eligBushesRoad"] = nil
+                markerData["WDecay_carryBushesRoad"] = nil
+                markerData["WDecay_placedBushesRoad"] = nil
+                markerData["WDecay_eligBushesIndoor"] = nil
+                markerData["WDecay_carryBushesIndoor"] = nil
+                markerData["WDecay_placedBushesIndoor"] = nil
+                markerData["WDecay_eligIndoorGrass"] = nil
+                markerData["WDecay_carryIndoorGrass"] = nil
+                markerData["WDecay_placedIndoorGrass"] = nil
+            end
+        end
+
+        if not pendingChunks[key] then
+            pendingChunks[key] = true
+            chunkQueueTailLow = chunkQueueTailLow + 1
+            chunkQueueLowChunks[chunkQueueTailLow] = chunk
+            chunkQueueLowKeys[chunkQueueTailLow] = key
+            chunkQueueLowWx[chunkQueueTailLow] = wx
+            chunkQueueLowWy[chunkQueueTailLow] = wy
+        end
+
+        queued = queued + 1
+    end)
+    print("[WDecay] Debug: queued " .. queued .. " chunks (radius=" .. radius .. ", wipeMarkers=" .. tostring(wipeMarkers == true) .. ")")
+    return queued
+end
+
+function WDecay_Dispatcher_StampDoneAt(radius, days)
+    radius = radius or 3
+    days = math.floor(tonumber(days) or 0)
+    local stamped = 0
+    forEachChunkAround(radius, function(chunk, wx, wy)
+        local markerSquare = getMarkerSquare(chunk)
+        if markerSquare then
+            local markerData = markerSquare:getModData()
+            if markerData["WDecay_done"] == CACHE_VERSION then
+                markerData["WDecay_doneAtDays"] = days
+                stamped = stamped + 1
+            end
+        end
+    end)
+    print("[WDecay] Debug: stamped " .. stamped .. " chunks doneAtDays=" .. days)
+    return stamped
+end

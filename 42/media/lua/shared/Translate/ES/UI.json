@@ -1,0 +1,9 @@
+{
+    "UI_REMOVE_VEG": "Limpiar vegetación",
+    "UI_CLEAN_TILE": "Limpiar este tile",
+    "UI_CLEAN_AREA_3": "Limpiar área 3x3",
+    "UI_CLEAN_AREA_5": "Limpiar área 5x5",
+    "UI_CLEAN_AREA_10": "Limpiar área 10x10",
+    "UI_FOUNDSOMETHING": "Encontré algo...",
+    "UI_GAINSKILL": "Recolección"
+}
