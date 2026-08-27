@@ -12,13 +12,13 @@ local PROP_ATTACHED_E = IsoPropertyType.lookup("attachedE"); local PROP_WALL_N =
 local PROP_WINDOW_N = IsoPropertyType.lookup("WindowN"); local PROP_DOOR_N = IsoPropertyType.lookup("doorN")
 local PROP_DOOR_WALL_N = IsoPropertyType.lookup("DoorWallN"); local PROP_WALL_N_TRANS = IsoPropertyType.lookup("WallNTrans")
 local PROP_ATTACHED_N = IsoPropertyType.lookup("attachedN"); local PROP_ATTACHED_S = IsoPropertyType.lookup("attachedS")
-local SPRITE_FENCE = "fence"; local SPRITE_FENCING = "fencing_"
-local getLowW = WDecay_Vines.getRandomWallWLow; local getW = WDecay_Vines.getRandomWallW
-local getLowN = WDecay_Vines.getRandomWallNLow; local getN = WDecay_Vines.getRandomWallN
-local getLowNW = WDecay_Vines.getRandomWallNWLow; local getNW = WDecay_Vines.getRandomWallNW
+local SPRITE_FENCE = "fence"; local SPRITE_FENCING = "fencing_"; local SPRITE_ROOF_WALL = "walls_exterior_roofs_"; local SPRITE_ROOF = "roofs_"
+local getLowW = WDecay_Vines.getRandomWallWLow; local getW = WDecay_Vines.getRandomWallW; local getTopW = WDecay_Vines.getRandomWallWTop
+local getLowN = WDecay_Vines.getRandomWallNLow; local getN = WDecay_Vines.getRandomWallN; local getTopN = WDecay_Vines.getRandomWallNTop
+local getLowNW = WDecay_Vines.getRandomWallNWLow; local getNW = WDecay_Vines.getRandomWallNW; local getTopNW = WDecay_Vines.getRandomWallNWTop
 local randomizer = WDecay_Random.get()
 local TIME_KEY = "WDecay_Vines-LoadGridsquare"
-local cvp=nil; local function getVP() if cvp==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinePercentage'); cvp=o and o:getValue() or 15 end; return cvp end
+local cvp=nil; local function getVP() if cvp==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinePercentage'); cvp=o and o:getValue() or 80 end; return cvp end
 local cmfv=nil; local function getMFV() if cmfv~=nil then return cmfv end; local o=getSandboxOptions():getOptionByName('WDecay.multiFloorVines'); if not o then return true end; cmfv=o:getValue(); return cmfv end
 local cveo=nil; local function isVEO() if cveo==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinesExteriorOnly'); cveo=o and o:getValue(); if cveo==nil then cveo=true end end; return cveo end
 local cvow=nil; local function isVOW() if cvow==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinesOnWalls'); cvow=o and o:getValue(); if cvow==nil then cvow=true end end; return cvow end
@@ -44,13 +44,29 @@ end
 local function createVine(square,obj,isLow,objs)
     if not square or not obj then return end
     if squareHasVine(square,objs) then return end
+    local sprN=obj:getSpriteName()
+    if sprN and (luautils.stringStarts(sprN, SPRITE_ROOF_WALL) or luautils.stringStarts(sprN, SPRITE_ROOF)) then return end
     local props=obj:getProperties(); if not props then return end
-    local lf,f=nil,nil
-    if props:has(PROP_WALL_NW,PROP_ATTACHED_NW) then lf,f=getLowNW,getNW
-    elseif props:has(PROP_WALL_N,PROP_WINDOW_N,PROP_DOOR_N,PROP_DOOR_WALL_N,PROP_WALL_N_TRANS,PROP_ATTACHED_N,PROP_ATTACHED_S) then lf,f=getLowN,getN
-    elseif props:has(PROP_WALL_W,PROP_WINDOW_W,PROP_DOOR_W,PROP_DOOR_WALL_W,PROP_ATTACHED_W,PROP_WALL_W_TRANS,PROP_ATTACHED_E) then lf,f=getLowW,getW
+    local lf,f,tf=nil,nil,nil
+    if props:has(PROP_WALL_NW,PROP_ATTACHED_NW) then lf,f,tf=getLowNW,getNW,getTopNW
+    elseif props:has(PROP_WALL_N,PROP_WINDOW_N,PROP_DOOR_N,PROP_DOOR_WALL_N,PROP_WALL_N_TRANS,PROP_ATTACHED_N,PROP_ATTACHED_S) then lf,f,tf=getLowN,getN,getTopN
+    elseif props:has(PROP_WALL_W,PROP_WINDOW_W,PROP_DOOR_W,PROP_DOOR_WALL_W,PROP_ATTACHED_W,PROP_WALL_W_TRANS,PROP_ATTACHED_E) then lf,f,tf=getLowW,getW,getTopW
     else return end
-    local sn=nil; if isLow and lf then sn=lf() elseif f then sn=f() end
+    local sn=nil
+    if isLow and lf then
+        sn=lf()
+    else
+        local hasAbove=false
+        if square:getZ()==0 then
+            hasAbove=true
+        else
+            local above=square:getSquareAbove()
+            if above and above:getWall() then hasAbove=true end
+        end
+        if hasAbove and f then sn=f()
+        elseif tf then sn=tf()
+        elseif f then sn=f() end
+    end
     if sn then WDecay_Placement.createTagged(square, sn, "vine") end
 end
 local function LoadGridsquare(square,checkResult,level)

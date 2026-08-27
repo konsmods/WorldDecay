@@ -121,21 +121,6 @@ function WDecay_DebugPrintStatus()
     print("[WDecay-Debug] ===================")
 end
 
-function WDecay_DebugPrintVineCounters()
-    if not vineDebugCounters then
-        print("[WDecay-Debug] Vine counters not available")
-        return
-    end
-
-    print("[WDecay-Debug] === VINE DEBUG ===")
-    print("[WDecay-Debug] Indoor squares checked: " .. vineDebugCounters.indoor)
-    print("[WDecay-Debug] Blocked by exteriorOnly: " .. vineDebugCounters.exteriorBlocked)
-    print("[WDecay-Debug] Failed chance check (indoor): " .. vineDebugCounters.chanceFail)
-    print("[WDecay-Debug] No matching walls found: " .. vineDebugCounters.noWalls)
-    print("[WDecay-Debug] Vines placed: " .. vineDebugCounters.placed)
-    print("[WDecay-Debug] ===================")
-end
-
 print("[WDecay-Debug] Debug module loaded. Type in console: WDecay_DebugPrintStatus()")
 
 WDecay_Debug = {

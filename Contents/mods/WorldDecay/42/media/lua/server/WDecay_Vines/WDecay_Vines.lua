@@ -16,8 +16,6 @@ WDecay_Vines.wallW = {
 }
 
 WDecay_Vines.wallW_top = {
-    "f_wallvines_1_37",
-    "f_wallvines_1_36",
     "f_wallvines_1_31",
     "f_wallvines_1_30",
     "f_wallvines_1_25",
@@ -41,8 +39,6 @@ WDecay_Vines.wallN = {
 }
 
 WDecay_Vines.wallN_top = {
-    "f_wallvines_1_39",
-    "f_wallvines_1_38",
     "f_wallvines_1_33",
     "f_wallvines_1_32",
     "f_wallvines_1_27",
@@ -66,10 +62,8 @@ WDecay_Vines.wallNW = {
 }
 
 WDecay_Vines.wallNW_top = {
-    "f_wallvines_1_41",
-    "f_wallvines_1_40",
-    "f_wallvines_1_34",
     "f_wallvines_1_35",
+    "f_wallvines_1_34",
     "f_wallvines_1_29",
     "f_wallvines_1_28"
 }
@@ -78,7 +72,6 @@ WDecay_Vines.wallNW_low = {
     "f_wallvines_1_29",
     "f_wallvines_1_28"
 }
-
 
 WDecay_Vines.wallProperties = {
     "WallNW",
@@ -166,14 +159,6 @@ function WDecay_Vines.isVine(spriteName)
     if not spriteName then return false end
 
     return luautils.stringStarts(spriteName, "f_wallvines_")
-end
-
-function WDecay_Vines.isTallVine(spriteName)
-    if not spriteName then return false end
-
-    return spriteName == "f_wallvines_1_47" or spriteName == "f_wallvines_1_46" or
-        spriteName == "f_wallvines_1_43" or spriteName == "f_wallvines_1_42" or
-        spriteName == "f_wallvines_1_44" or spriteName == "f_wallvines_1_45"
 end
 
 return WDecay_Vines
