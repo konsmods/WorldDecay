@@ -75,6 +75,26 @@ function WDecay_Grass.getRandomVanillaGrass()
     return vanilla_grass[randomizer:random(1, #vanilla_grass)]
 end
 
+local cachedBase = nil
+function WDecay_Grass.getBasePercentage()
+    if cachedBase == nil then
+        local opt = getSandboxOptions():getOptionByName('WDecay.outdoorGrassPercentage')
+        cachedBase = opt and opt:getValue() or 0
+    end
+
+    return cachedBase
+end
+
+local cachedBaseRoad = nil
+function WDecay_Grass.getBasePercentageOnRoad()
+    if cachedBaseRoad == nil then
+        local opt = getSandboxOptions():getOptionByName('WDecay.outdoorGrassPercentageOnRoad')
+        cachedBaseRoad = opt and opt:getValue() or 0
+    end
+
+    return cachedBaseRoad
+end
+
 local cachedIndoorBase = nil
 function WDecay_Grass.getIndoorBasePercentage()
     if cachedIndoorBase == nil then
@@ -86,6 +106,8 @@ function WDecay_Grass.getIndoorBasePercentage()
 end
 
 function WDecay_Grass.resetCaches()
+    cachedBase = nil
+    cachedBaseRoad = nil
     cachedIndoorBase = nil
 end
 

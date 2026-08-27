@@ -9,7 +9,7 @@ local WDecay_Trees = require('WDecay_Trees/WDecay_Trees')
 local WDecay_Bushes = require('WDecay_Bushes/WDecay_Bushes')
 local WDecay_Grass = require('WDecay_Grass/WDecay_Grass')
 
-local CACHE_VERSION = 3
+local CACHE_VERSION = 4
 local DEBUG_MODE = false
 
 local seenChunks = {}
@@ -156,7 +156,11 @@ local function recordNewPlacements(markerData, square, checkResult, existing)
                     key = checkResult.isRoad and "WDecay_placedBushesRoad" or "WDecay_placedBushesNatural"
                 end
             elseif cleanableType == "grass" then
-                key = "WDecay_placedIndoorGrass"
+                if checkResult.isIndoor then
+                    key = "WDecay_placedGrassIndoor"
+                else
+                    key = checkResult.isRoad and "WDecay_placedGrassRoad" or "WDecay_placedGrassNatural"
+                end
             end
             if key then markerData[key] = (markerData[key] or 0) + 1 end
         end
@@ -320,12 +324,49 @@ local carryCategories = {
     },
     {
         scaleCategory = "nature",
-        eligKey = "WDecay_eligIndoorGrass",
-        carryKey = "WDecay_carryIndoorGrass",
-        placedKey = "WDecay_placedIndoorGrass",
+        eligKey = "WDecay_eligGrassNatural",
+        carryKey = "WDecay_carryGrassNatural",
+        placedKey = "WDecay_placedGrassNatural",
+        eligible = function(checkResult, level)
+            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
+        end,
+        basePercent = function() return WDecay_Grass.getBasePercentage() end,
+        hasExisting = function(square, objects)
+            return squareHasSprite(square, { "e_newgrass_", "d_generic_", "d_plants_" }, "grass", objects)
+        end,
+        place = function(square)
+            if not WDecay_Placement.isSafe(square) then return false end
+            return WDecay_Placement.createTagged(square, WDecay_Grass.getRandomVanillaGrass(), "grass")
+        end,
+    },
+    {
+        scaleCategory = "nature",
+        eligKey = "WDecay_eligGrassRoad",
+        carryKey = "WDecay_carryGrassRoad",
+        placedKey = "WDecay_placedGrassRoad",
         eligible = function(checkResult, level)
             return level == 0 and checkResult and not checkResult.cleaned
-                and checkResult.isGoodSquare == true and checkResult.isIndoor == true
+                and checkResult.isRoad == true and WDecay_Grass.getBasePercentageOnRoad() > 0
+        end,
+        basePercent = function() return WDecay_Grass.getBasePercentageOnRoad() end,
+        hasExisting = function(square, objects)
+            return squareHasSprite(square, { "e_newgrass_", "d_generic_", "d_plants_" }, "grass", objects)
+        end,
+        place = function(square)
+            if not WDecay_Placement.isSafe(square) then return false end
+            return WDecay_Placement.createTagged(square, WDecay_Grass.getRandomVanillaGrass(), "grass")
+        end,
+    },
+    {
+        scaleCategory = "nature",
+        eligKey = "WDecay_eligGrassIndoor",
+        carryKey = "WDecay_carryGrassIndoor",
+        placedKey = "WDecay_placedGrassIndoor",
+        scanAllLevels = true,
+        eligible = function(checkResult, level)
+            if not checkResult or checkResult.cleaned then return false end
+            if level ~= 0 then return checkResult.hasRoof == true and checkResult.isIndoor == true end
+            return checkResult.isGoodSquare == true and checkResult.isIndoor == true
                 and WDecay_Grass.getIndoorBasePercentage() > 0
         end,
         basePercent = function() return WDecay_Grass.getIndoorBasePercentage() end,
@@ -1131,6 +1172,15 @@ function WDecay_Dispatcher_QueueArea(radius, wipeMarkers)
                 markerData["WDecay_eligIndoorGrass"] = nil
                 markerData["WDecay_carryIndoorGrass"] = nil
                 markerData["WDecay_placedIndoorGrass"] = nil
+                markerData["WDecay_eligGrassNatural"] = nil
+                markerData["WDecay_carryGrassNatural"] = nil
+                markerData["WDecay_placedGrassNatural"] = nil
+                markerData["WDecay_eligGrassRoad"] = nil
+                markerData["WDecay_carryGrassRoad"] = nil
+                markerData["WDecay_placedGrassRoad"] = nil
+                markerData["WDecay_eligGrassIndoor"] = nil
+                markerData["WDecay_carryGrassIndoor"] = nil
+                markerData["WDecay_placedGrassIndoor"] = nil
             end
         end
 

@@ -1,22 +1,9 @@
 local Sprites = {}
 
+--Overlays with no DEPTH_<sheet>.png and no FloorOverlay flag fall back to
+--DEPTH_whole_tile's box shape and get clipped. blends_grassoverlays_01 hit
+--this and was removed. Check media/depthmaps/ before adding a new sheet.
 Sprites.vanilla = {
-    "blends_grassoverlays_01_0",  "blends_grassoverlays_01_1",  "blends_grassoverlays_01_2",
-    "blends_grassoverlays_01_3",  "blends_grassoverlays_01_4",  "blends_grassoverlays_01_5",
-    "blends_grassoverlays_01_6",  "blends_grassoverlays_01_7",  "blends_grassoverlays_01_8",
-    "blends_grassoverlays_01_9",  "blends_grassoverlays_01_10", "blends_grassoverlays_01_11",
-    "blends_grassoverlays_01_12", "blends_grassoverlays_01_13", "blends_grassoverlays_01_14",
-    "blends_grassoverlays_01_15", "blends_grassoverlays_01_16", "blends_grassoverlays_01_17",
-    "blends_grassoverlays_01_18", "blends_grassoverlays_01_19", "blends_grassoverlays_01_20",
-    "blends_grassoverlays_01_21", "blends_grassoverlays_01_22", "blends_grassoverlays_01_23",
-    "blends_grassoverlays_01_24", "blends_grassoverlays_01_25", "blends_grassoverlays_01_26",
-    "blends_grassoverlays_01_27", "blends_grassoverlays_01_28", "blends_grassoverlays_01_29",
-    "blends_grassoverlays_01_30", "blends_grassoverlays_01_31", "blends_grassoverlays_01_32",
-    "blends_grassoverlays_01_33", "blends_grassoverlays_01_34", "blends_grassoverlays_01_35",
-    "blends_grassoverlays_01_36", "blends_grassoverlays_01_37", "blends_grassoverlays_01_38",
-    "blends_grassoverlays_01_39", "blends_grassoverlays_01_40", "blends_grassoverlays_01_41",
-    "blends_grassoverlays_01_42", "blends_grassoverlays_01_43", "blends_grassoverlays_01_44",
-    "blends_grassoverlays_01_45",
     "d_streetcracks_1_48",  "d_streetcracks_1_49",  "d_streetcracks_1_50",
     "d_streetcracks_1_51",  "d_streetcracks_1_52",  "d_streetcracks_1_53",
     "d_streetcracks_1_54",  "d_streetcracks_1_55",  "d_streetcracks_1_56",
@@ -90,14 +77,7 @@ Sprites.dry = {
     "d_streetcracks_1_111", "d_streetcracks_1_112", "d_streetcracks_1_113",
     "d_streetcracks_1_114", "d_streetcracks_1_115", "d_streetcracks_1_116",
     "d_streetcracks_1_117", "d_streetcracks_1_118", "d_streetcracks_1_119",
-    "blends_grassoverlays_01_48", "blends_grassoverlays_01_49", "blends_grassoverlays_01_50",
-    "blends_grassoverlays_01_51", "blends_grassoverlays_01_52", "blends_grassoverlays_01_53",
-    "blends_grassoverlays_01_54", "blends_grassoverlays_01_55", "blends_grassoverlays_01_56",
-    "blends_grassoverlays_01_57", "blends_grassoverlays_01_58", "blends_grassoverlays_01_59",
-    "blends_grassoverlays_01_60", "blends_grassoverlays_01_61", "blends_grassoverlays_01_62",
-    "blends_grassoverlays_01_63", "blends_grassoverlays_01_64", "blends_grassoverlays_01_65",
-    "blends_grassoverlays_01_66", "blends_grassoverlays_01_67", "blends_grassoverlays_01_68",
-    "blends_grassoverlays_01_69",
+    --blends_grassoverlays_01 removed here too - no depth map, see header.
     "e_newgrass_1_96",  "e_newgrass_1_97",  "e_newgrass_1_98",  "e_newgrass_1_99",
     "e_newgrass_1_100", "e_newgrass_1_101", "e_newgrass_1_102", "e_newgrass_1_103",
     "e_newgrass_1_104", "e_newgrass_1_105", "e_newgrass_1_106", "e_newgrass_1_107",
