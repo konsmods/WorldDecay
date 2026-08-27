@@ -1,6 +1,14 @@
 local isDebug = isDebugEnabled()
 
-WD_DebugTools = require("Debug/WD_DebugTools")
+local FALLBACK_FLAGS = {
+    FLAG_GENERATE_SQUARE = 1,
+    FLAG_PRINT_CHECKRESULT = 2,
+    FLAG_PRINT_OBJECT_INFO = 3,
+    FLAG_PRINT_METRIC = 4,
+    FLAG_BENCHMARK = 5,
+}
+
+WD_DebugTools = WD_DebugTools or FALLBACK_FLAGS
 
 local DEBUG_TOOLS = "#### - Debug Tools - ####"
 local GENERATE_SQUARE = "Generate Square"

@@ -6,13 +6,15 @@
 - `blends_grassoverlays_01` had no depth map and no `FloorOverlay` flag, so B42's tile-depth fallback clipped it to a box silhouette (straight-line cutoffs). Removed from the overlay pools.
 - Grass only ever spawned as a real object indoors; outdoors/roads it was overlay-only (flat, no depth, no player occlusion). `WDecay_Grass` now mirrors `WDecay_Bushes`: real grass objects on natural ground, roads, and indoors, each with its own sandbox percentage.
 - Vehicle decay could remove a brake/suspension part while leaving its tire installed, which the game itself never allows (both require the tire off first). The generator was calling `vehicle:setTireRemoved` to force that - a Bullet-physics flag only, gated `!GameServer.server` and never touching the tire's actual inventory item. Now calls `tirePart:setInventoryItem(nil)` directly, same as the tire branch itself (this also correctly zeroes the tire's air/container content).
+- Debug context menu required the server-only `Debug/WD_DebugTools` at client load time, failing `require()` and flagging the modlist with `[ERRORS]`. Now falls back to local flag constants; the global is used once the server module loads.
+- Sandbox tooltips/names used literal `%` (e.g. "(%)", "+25% per year"), which PZ's `String.format` choked on, throwing `UnknownFormatConversionException`/`MissingFormatArgumentException` per option. All `%` are now escaped as `%%` in every locale.
 
 ## Known Issues
 
 - Some Maniks Tiles are a bit too dark (quick fix in .pack?, put up the brightness)
 - Vines on walls do not disappear when walls disappear to allow player to see inside places
 - (Vanilla?) Sometimes broken vehicles can be see-through for a bit on spawn
-- Vehicle Decay: Suspension / brakes missing while wheel still on
+- Roadlines overlap with grass overlays
 
 ## Roadmap / Ideas
 
