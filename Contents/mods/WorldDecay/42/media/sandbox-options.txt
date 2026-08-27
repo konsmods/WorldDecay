@@ -305,7 +305,7 @@ option WDecay.indoorBushesPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 30,
+	default = 20,
 	page = WDecay_Nature,
 	translation = WDecay_indoorBushesPercentage,
 }
@@ -323,7 +323,7 @@ option WDecay.grassPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 70,
+	default = 20,
 	page = WDecay_Nature,
 	translation = WDecay_grassPercentage,
 }
@@ -333,7 +333,7 @@ option WDecay.grassPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 90,
+	default = 20,
 	page = WDecay_Nature,
 	translation = WDecay_grassPercentageOnRoad,
 }
@@ -373,7 +373,7 @@ option WDecay.dryGrassPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 0,
+	default = 10,
 	page = WDecay_Nature,
 	translation = WDecay_dryGrassPercentageOnRoad,
 }
@@ -431,7 +431,7 @@ option WDecay.outdoorGrassPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 0,
 	page = WDecay_Nature,
 	translation = WDecay_outdoorGrassPercentage,
 }
@@ -441,7 +441,7 @@ option WDecay.outdoorGrassPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 0,
+	default = 40,
 	page = WDecay_Nature,
 	translation = WDecay_outdoorGrassPercentageOnRoad,
 }
@@ -451,7 +451,7 @@ option WDecay.indoorGrassPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 100,
+	default = 60,
 	page = WDecay_Nature,
 	translation = WDecay_indoorGrassPercentage,
 }
@@ -746,7 +746,7 @@ option WDecay.vehicleRustMin
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 100,
+	default = 80,
 	page = WDecay_Vehicles,
 	translation = WDecay_vehicleRustMin,
 }
@@ -842,7 +842,7 @@ option WDecay.batteryMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 30,
 	page = WDecay_Vehicles,
 	translation = WDecay_batteryMissingChance,
 }
@@ -902,7 +902,7 @@ option WDecay.gasTankMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 30,
 	page = WDecay_Vehicles,
 	translation = WDecay_gasTankMissingChance,
 }
@@ -950,7 +950,7 @@ option WDecay.tireMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 20,
 	page = WDecay_Vehicles,
 	translation = WDecay_tireMissingChance,
 }
@@ -990,7 +990,7 @@ option WDecay.brakeMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 10,
 	page = WDecay_Vehicles,
 	translation = WDecay_brakeMissingChance,
 }
@@ -1030,7 +1030,7 @@ option WDecay.suspensionMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 5,
 	page = WDecay_Vehicles,
 	translation = WDecay_suspensionMissingChance,
 }
@@ -1126,7 +1126,7 @@ option WDecay.doorMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 20,
 	page = WDecay_Vehicles,
 	translation = WDecay_doorMissingChance,
 }
@@ -1166,7 +1166,7 @@ option WDecay.hoodMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 20,
 	page = WDecay_Vehicles,
 	translation = WDecay_hoodMissingChance,
 }
@@ -1206,7 +1206,7 @@ option WDecay.trunkMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 20,
 	page = WDecay_Vehicles,
 	translation = WDecay_trunkMissingChance,
 }
@@ -1254,7 +1254,7 @@ option WDecay.windowMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 20,
 	page = WDecay_Vehicles,
 	translation = WDecay_windowMissingChance,
 }
@@ -1294,7 +1294,7 @@ option WDecay.headlightMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 10,
 	page = WDecay_Vehicles,
 	translation = WDecay_headlightMissingChance,
 }
@@ -1334,7 +1334,7 @@ option WDecay.taillightMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 10,
 	page = WDecay_Vehicles,
 	translation = WDecay_taillightMissingChance,
 }
@@ -1382,7 +1382,7 @@ option WDecay.gloveBoxMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 0,
 	page = WDecay_Vehicles,
 	translation = WDecay_gloveBoxMissingChance,
 }
@@ -1422,7 +1422,7 @@ option WDecay.radioMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 20,
 	page = WDecay_Vehicles,
 	translation = WDecay_radioMissingChance,
 }
@@ -1462,7 +1462,7 @@ option WDecay.heaterMissingChance
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 10,
 	page = WDecay_Vehicles,
 	translation = WDecay_heaterMissingChance,
 }

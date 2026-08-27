@@ -5,10 +5,14 @@
 - Fence decay generator (`WDecay_Fences.lua`) could misclassify B42 entity-type fences (e.g. `MetalBigWireFence`) as classic breakable/bendable fences via `BrokenFences`/`BentFences`. Now skipped explicitly.
 - `blends_grassoverlays_01` had no depth map and no `FloorOverlay` flag, so B42's tile-depth fallback clipped it to a box silhouette (straight-line cutoffs). Removed from the overlay pools.
 - Grass only ever spawned as a real object indoors; outdoors/roads it was overlay-only (flat, no depth, no player occlusion). `WDecay_Grass` now mirrors `WDecay_Bushes`: real grass objects on natural ground, roads, and indoors, each with its own sandbox percentage.
+- Vehicle decay could remove a brake/suspension part while leaving its tire installed, which the game itself never allows (both require the tire off first). The generator was calling `vehicle:setTireRemoved` to force that - a Bullet-physics flag only, gated `!GameServer.server` and never touching the tire's actual inventory item. Now calls `tirePart:setInventoryItem(nil)` directly, same as the tire branch itself (this also correctly zeroes the tire's air/container content).
 
 ## Known Issues
 
-- Tile overlays can never occlude the player. `IsoObject.renderAttachedSprites` calls `glDepthMask(false)` whenever the parent object is a floor, so floor-attached sprites write no depth and characters always draw on top. Unfixable from Lua - vegetation that should hide the player's legs has to be a real `IsoObject` (which is what vanilla's own `WorldGen/features/plant/grass_*.lua` does via `IsoObject.new` + `square:AddTileObject`), not an overlay.
+- Some Maniks Tiles are a bit too dark (quick fix in .pack?, put up the brightness)
+- Vines on walls do not disappear when walls disappear to allow player to see inside places
+- (Vanilla?) Sometimes broken vehicles can be see-through for a bit on spawn
+- Vehicle Decay: Suspension / brakes missing while wheel still on
 
 ## Roadmap / Ideas
 

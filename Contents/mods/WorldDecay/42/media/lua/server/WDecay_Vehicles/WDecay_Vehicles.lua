@@ -112,13 +112,18 @@ local function damagePart(vehicle, part, category, missingWheel)
         end
     elseif category == "brake" or category == "suspension" then
         if miss > 0 and randomizer:random(0, 100) < miss then
+            -- Brakes/suspension sit under the tire (see vehicle scripts:
+            -- both declare area = Tire<pos> and requireUninstalled = Tire<pos>),
+            -- so removing one has to remove the tire too, the same way the
+            -- "tire" branch above does it: setInventoryItem(nil), which also
+            -- zeroes the tire's air/container content via doInventoryItemStats.
             local wIdx = part:getWheelIndex()
-            if wIdx < 0 then
-                local tirePart = vehicle:getPartById(part:getArea())
-                if tirePart then wIdx = tirePart:getWheelIndex() end
-            end
+            local tirePart = wIdx < 0 and vehicle:getPartById(part:getArea()) or nil
+            if tirePart then wIdx = tirePart:getWheelIndex() end
+
             if wIdx >= 0 and not missingWheel[wIdx] then
                 missingWheel[wIdx] = true
+                if tirePart then tirePart:setInventoryItem(nil) end
                 local ok, err = pcall(function() vehicle:setTireRemoved(wIdx, true) end)
                 if not ok then print("[WDecay] Vehicle tire removal error: " .. tostring(err):sub(1, 120)) end
             end
