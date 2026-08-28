@@ -12,7 +12,7 @@ local PROP_ATTACHED_E = IsoPropertyType.lookup("attachedE"); local PROP_WALL_N =
 local PROP_WINDOW_N = IsoPropertyType.lookup("WindowN"); local PROP_DOOR_N = IsoPropertyType.lookup("doorN")
 local PROP_DOOR_WALL_N = IsoPropertyType.lookup("DoorWallN"); local PROP_WALL_N_TRANS = IsoPropertyType.lookup("WallNTrans")
 local PROP_ATTACHED_N = IsoPropertyType.lookup("attachedN"); local PROP_ATTACHED_S = IsoPropertyType.lookup("attachedS")
-local SPRITE_FENCE = "fence"; local SPRITE_FENCING = "fencing_"; local SPRITE_ROOF_WALL = "walls_exterior_roofs_"; local SPRITE_ROOF = "roofs_"; local SPRITE_LOW_HOUSE_WALL = "walls_exterior_house_low_"
+local SPRITE_FENCE = "fence"; local SPRITE_FENCING = "fencing_"; local SPRITE_ROOF_WALL = "walls_exterior_roofs_"; local SPRITE_ROOF = "roofs_"; local SPRITE_LOW_HOUSE_WALL = "walls_exterior_house_low_"; local SPRITE_CONSTRUCTION = "construction_"
 local getLowW = WDecay_Vines.getRandomWallWLow; local getW = WDecay_Vines.getRandomWallW; local getTopW = WDecay_Vines.getRandomWallWTop
 local getLowN = WDecay_Vines.getRandomWallNLow; local getN = WDecay_Vines.getRandomWallN; local getTopN = WDecay_Vines.getRandomWallNTop
 local getLowNW = WDecay_Vines.getRandomWallNWLow; local getNW = WDecay_Vines.getRandomWallNW; local getTopNW = WDecay_Vines.getRandomWallNWTop
@@ -45,7 +45,7 @@ local function createVine(square,obj,isLow,objs)
     if not square or not obj then return end
     if squareHasVine(square,objs) then return end
     local sprN=obj:getSpriteName()
-    if sprN and (luautils.stringStarts(sprN, SPRITE_ROOF_WALL) or luautils.stringStarts(sprN, SPRITE_ROOF)) then return end
+    if sprN and (luautils.stringStarts(sprN, SPRITE_ROOF_WALL) or luautils.stringStarts(sprN, SPRITE_ROOF) or luautils.stringStarts(sprN, SPRITE_CONSTRUCTION)) then return end
     if sprN and luautils.stringStarts(sprN, SPRITE_LOW_HOUSE_WALL) then isLow=true end
     local props=obj:getProperties(); if not props then return end
     local lf,f,tf=nil,nil,nil
