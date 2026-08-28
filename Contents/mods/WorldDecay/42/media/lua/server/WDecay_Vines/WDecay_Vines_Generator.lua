@@ -3,6 +3,7 @@ local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 local WDecay_Placement = require('wdecay_placement/wdecay_placement')
 local WDecay_Vines = require('WDecay_Vines/WDecay_Vines')
+local WDecay_Vines_SpriteRules = require('WDecay_Vines/WDecay_Vines_SpriteRules')
 local PROP_FENCE_LOW = IsoPropertyType.lookup("FenceTypeLow")
 local PROP_WALL_NW = IsoPropertyType.lookup("WallNW"); local PROP_ATTACHED_NW = IsoPropertyType.lookup("attachedNW")
 local PROP_WALL_W = IsoPropertyType.lookup("WallW"); local PROP_WINDOW_W = IsoPropertyType.lookup("WindowW")
@@ -12,7 +13,7 @@ local PROP_ATTACHED_E = IsoPropertyType.lookup("attachedE"); local PROP_WALL_N =
 local PROP_WINDOW_N = IsoPropertyType.lookup("WindowN"); local PROP_DOOR_N = IsoPropertyType.lookup("doorN")
 local PROP_DOOR_WALL_N = IsoPropertyType.lookup("DoorWallN"); local PROP_WALL_N_TRANS = IsoPropertyType.lookup("WallNTrans")
 local PROP_ATTACHED_N = IsoPropertyType.lookup("attachedN"); local PROP_ATTACHED_S = IsoPropertyType.lookup("attachedS")
-local SPRITE_FENCE = "fence"; local SPRITE_FENCING = "fencing_"; local SPRITE_ROOF_WALL = "walls_exterior_roofs_"; local SPRITE_ROOF = "roofs_"; local SPRITE_LOW_HOUSE_WALL = "walls_exterior_house_low_"; local SPRITE_CONSTRUCTION = "construction_"
+local SPRITE_FENCE = "fence"; local SPRITE_FENCING = "fencing_"
 local getLowW = WDecay_Vines.getRandomWallWLow; local getW = WDecay_Vines.getRandomWallW; local getTopW = WDecay_Vines.getRandomWallWTop
 local getLowN = WDecay_Vines.getRandomWallNLow; local getN = WDecay_Vines.getRandomWallN; local getTopN = WDecay_Vines.getRandomWallNTop
 local getLowNW = WDecay_Vines.getRandomWallNWLow; local getNW = WDecay_Vines.getRandomWallNW; local getTopNW = WDecay_Vines.getRandomWallNWTop
@@ -41,12 +42,10 @@ local function squareHasVine(square,objs)
     end
     return false
 end
-local function squareHasConstruction(objs)
+local function squareHasBlacklistedSprite(objs)
     if not objs then return false end
     for i=0,objs:size()-1 do local obj=objs:get(i)
-        if obj then local n=obj:getSpriteName()
-            if n and luautils.stringStarts(n, SPRITE_CONSTRUCTION) then return true end
-        end
+        if obj and WDecay_Vines_SpriteRules.matches(obj:getSpriteName(), WDecay_Vines_SpriteRules.skipSquare) then return true end
     end
     return false
 end
@@ -54,8 +53,8 @@ local function createVine(square,obj,isLow,objs)
     if not square or not obj then return end
     if squareHasVine(square,objs) then return end
     local sprN=obj:getSpriteName()
-    if sprN and (luautils.stringStarts(sprN, SPRITE_ROOF_WALL) or luautils.stringStarts(sprN, SPRITE_ROOF) or luautils.stringStarts(sprN, SPRITE_CONSTRUCTION)) then return end
-    if sprN and luautils.stringStarts(sprN, SPRITE_LOW_HOUSE_WALL) then isLow=true end
+    if WDecay_Vines_SpriteRules.matches(sprN, WDecay_Vines_SpriteRules.skip) then return end
+    if WDecay_Vines_SpriteRules.matches(sprN, WDecay_Vines_SpriteRules.forceLow) then isLow=true end
     local props=obj:getProperties(); if not props then return end
     local lf,f,tf=nil,nil,nil
     if props:has(PROP_WALL_NW,PROP_ATTACHED_NW) then lf,f,tf=getLowNW,getNW,getTopNW
@@ -86,7 +85,7 @@ local function LoadGridsquare(square,checkResult,level)
     if isVEO() and checkResult.isIndoor then return end
     if WDecay_Scaling.scaleFor('nature',getVP())<randomizer:random(1,100) then return end
     local objs = checkResult.objects or (checkResult.wall and square:getObjects())
-    if squareHasConstruction(objs or square:getObjects()) then return end
+    if squareHasBlacklistedSprite(objs or square:getObjects()) then return end
     if square:hasFence() and isVOF() then local fence=getFence(objs); if fence then local fp=fence:getProperties(); createVine(square,fence,fp and fp:has(PROP_FENCE_LOW),objs) end end
     if checkResult.wall and isVOW() then createVine(square,checkResult.wall,false,objs) end
 end
@@ -100,7 +99,7 @@ function WDecay_Vines_ApplyToSquare(square,checkResult,level)
     if isVEO() and checkResult and checkResult.isIndoor then return end
     if WDecay_Scaling.scaleFor('nature',getVP())<randomizer:random(1,100) then return end
     local objs=(checkResult and checkResult.objects) or square:getObjects()
-    if squareHasConstruction(objs) then return end
+    if squareHasBlacklistedSprite(objs) then return end
     if square:hasFence() and isVOF() then local fence=getFence(objs); if fence then local fp=fence:getProperties(); createVine(square,fence,fp and fp:has(PROP_FENCE_LOW),objs) end end
     if checkResult and checkResult.wall and isVOW() then createVine(square,checkResult.wall,false,objs) end
 end
