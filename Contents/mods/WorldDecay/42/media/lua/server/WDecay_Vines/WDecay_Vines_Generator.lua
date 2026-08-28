@@ -41,6 +41,15 @@ local function squareHasVine(square,objs)
     end
     return false
 end
+local function squareHasConstruction(objs)
+    if not objs then return false end
+    for i=0,objs:size()-1 do local obj=objs:get(i)
+        if obj then local n=obj:getSpriteName()
+            if n and luautils.stringStarts(n, SPRITE_CONSTRUCTION) then return true end
+        end
+    end
+    return false
+end
 local function createVine(square,obj,isLow,objs)
     if not square or not obj then return end
     if squareHasVine(square,objs) then return end
@@ -77,6 +86,7 @@ local function LoadGridsquare(square,checkResult,level)
     if isVEO() and checkResult.isIndoor then return end
     if WDecay_Scaling.scaleFor('nature',getVP())<randomizer:random(1,100) then return end
     local objs = checkResult.objects or (checkResult.wall and square:getObjects())
+    if squareHasConstruction(objs or square:getObjects()) then return end
     if square:hasFence() and isVOF() then local fence=getFence(objs); if fence then local fp=fence:getProperties(); createVine(square,fence,fp and fp:has(PROP_FENCE_LOW),objs) end end
     if checkResult.wall and isVOW() then createVine(square,checkResult.wall,false,objs) end
 end
@@ -89,8 +99,10 @@ function WDecay_Vines_ApplyToSquare(square,checkResult,level)
     if not getMFV() and level~=0 then return end
     if isVEO() and checkResult and checkResult.isIndoor then return end
     if WDecay_Scaling.scaleFor('nature',getVP())<randomizer:random(1,100) then return end
-    if square:hasFence() and isVOF() then local objs=(checkResult and checkResult.objects) or square:getObjects(); local fence=getFence(objs); if fence then local fp=fence:getProperties(); createVine(square,fence,fp and fp:has(PROP_FENCE_LOW),objs) end end
-    if checkResult and checkResult.wall and isVOW() then createVine(square,checkResult.wall,false,(checkResult and checkResult.objects)) end
+    local objs=(checkResult and checkResult.objects) or square:getObjects()
+    if squareHasConstruction(objs) then return end
+    if square:hasFence() and isVOF() then local fence=getFence(objs); if fence then local fp=fence:getProperties(); createVine(square,fence,fp and fp:has(PROP_FENCE_LOW),objs) end end
+    if checkResult and checkResult.wall and isVOW() then createVine(square,checkResult.wall,false,objs) end
 end
 local function resetCaches()
     cvp=nil; cmfv=nil; cveo=nil; cvow=nil; cvof=nil
