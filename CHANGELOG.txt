@@ -1,13 +1,18 @@
+[h1]2.1.1[/h1]
+[list]
+[*]Added per-tree-species sandbox options so each tree type can be tuned or disabled individually.
+[*]Added Bush Percentage (Roofs) and wired up Roof Grass Percentage (previously unused) for real roof overgrowth.
+[*]Texture submods no longer depend on the core WorldDecay mod (removed the hard require).
+[*]Rebalanced defaults: tree 10, bush 25, vine 70, bush-on-road 2.
+[*]Credits updated.
+[/list]
+
 [h1]2.1.0[/h1]
 [list]
-[*]Trees, bushes, grass, and vines now use vanilla's real seasonal sprite data (reverse-engineered from vanilla's own erosion system) instead of a static random sprite pool.
-[*]Trees grow a seasonal foliage crown (attached on top of the trunk, so chopping still only takes one hit) and drop it in winter; evergreen species are unaffected. Both trees and bushes swap to a snow-dusted frame while it's snowing.
-[*]Bushes now bloom flowers during their real vanilla bloom window and lose their seasonal foliage/flowers in winter.
-[*]Grass objects (the ones with visible depth, not the ground overlay) now dry out to vanilla's yellowed autumn/winter look instead of staying green year-round.
-[*]Vines now cycle through vanilla's real growth/regrowth/dieback frames across the seasons instead of always using the peak-growth look.
-[*]Already-placed trees, bushes, grass, and vines now update live as the season changes or snow starts/stops, instead of only reflecting whatever season they happened to be placed in.
-[*]Fixed vines never actually being detected/tagged as WorldDecay-placed: vine sprites are applied as an overlay on the host wall/fence in vanilla's own tile data rather than as a standalone object, so the old tagging check could never see them.
-[*]Added debug tools (debug mode only): Advance Month, Print Climate Info, Force Reseason Nearby Trees/Bushes/Grass/Vines, and a Spawn Tree submenu for previewing every vanilla tree species/tier/season combination on demand.
+[*]Vegetation now evolves with real vanilla seasonal sprites and updates live as seasons/snow change.
+[*]Trees grow a seasonal foliage crown (evergreens unaffected), bushes bloom in their vanilla window, grass dries in autumn/winter, and vines cycle through growth/dieback frames.
+[*]Fixed vines never being tagged as WorldDecay-placed.
+[*]Added debug tools (debug mode only) for advancing the month and previewing seasonal sprites.
 [/list]
 
 [h1]2.0.2[/h1]

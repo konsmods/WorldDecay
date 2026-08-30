@@ -247,7 +247,7 @@ option WDecay.treePercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 20,
+	default = 10,
 	page = WDecay_Nature,
 	translation = WDecay_treePercentage,
 }
@@ -272,6 +272,84 @@ option WDecay.jumboXLXXLPercentage
 	translation = WDecay_jumboXLXXLPercentage,
 }
 
+option Text.WDecay_Divider_Nature_TreeSpecies
+{
+	type = boolean,
+	default = true,
+	page = WDecay_Nature,
+	translation = WDecay_Divider_Nature_TreeSpecies,
+}
+
+option WDecay.treeRedmaplePercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 100,
+	page = WDecay_Nature,
+	translation = WDecay_treeRedmaplePercentage,
+}
+
+option WDecay.treeDogwoodPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 100,
+	page = WDecay_Nature,
+	translation = WDecay_treeDogwoodPercentage,
+}
+
+option WDecay.treeRiverbirchPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 100,
+	page = WDecay_Nature,
+	translation = WDecay_treeRiverbirchPercentage,
+}
+
+option WDecay.treeAmericanlindenPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 100,
+	page = WDecay_Nature,
+	translation = WDecay_treeAmericanlindenPercentage,
+}
+
+option WDecay.treeAmericanhollyPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 100,
+	page = WDecay_Nature,
+	translation = WDecay_treeAmericanhollyPercentage,
+}
+
+option WDecay.treeCanadianhemlockPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 100,
+	page = WDecay_Nature,
+	translation = WDecay_treeCanadianhemlockPercentage,
+}
+
+option WDecay.treeVirginiapinePercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 100,
+	page = WDecay_Nature,
+	translation = WDecay_treeVirginiapinePercentage,
+}
+
 option Text.WDecay_Divider_Nature_Bushes
 {
 	type = boolean,
@@ -285,7 +363,7 @@ option WDecay.bushesPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 25,
 	page = WDecay_Nature,
 	translation = WDecay_bushesPercentage,
 }
@@ -295,7 +373,7 @@ option WDecay.bushesPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 0,
+	default = 2,
 	page = WDecay_Nature,
 	translation = WDecay_bushesPercentageOnRoad,
 }
@@ -308,6 +386,16 @@ option WDecay.indoorBushesPercentage
 	default = 10,
 	page = WDecay_Nature,
 	translation = WDecay_indoorBushesPercentage,
+}
+
+option WDecay.bushesPercentageOnRoof
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 5,
+	page = WDecay_Nature,
+	translation = WDecay_bushesPercentageOnRoof,
 }
 
 option Text.WDecay_Divider_Nature_Grass
@@ -469,7 +557,7 @@ option WDecay.vinePercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 80,
+	default = 70,
 	page = WDecay_Nature,
 	translation = WDecay_vinePercentage,
 }

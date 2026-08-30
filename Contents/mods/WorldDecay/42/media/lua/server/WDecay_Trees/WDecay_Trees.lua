@@ -19,6 +19,62 @@ WDecay_Trees.species = {
     { id = "americanlinden", evergreen = false },
 }
 
+-- Per-species sandbox option names. Each species' weight (0-100) lets the
+-- player tune how common it is relative to the others; 0 fully disables it.
+-- Cached so the dispatcher's per-square pick isn't hitting the sandbox options
+-- table on every roll.
+local SPECIES_OPTIONS = {
+    { id = "americanholly", opt = "WDecay.treeAmericanhollyPercentage", default = 100 },
+    { id = "canadianhemlock", opt = "WDecay.treeCanadianhemlockPercentage", default = 100 },
+    { id = "virginiapine", opt = "WDecay.treeVirginiapinePercentage", default = 100 },
+    { id = "redmaple", opt = "WDecay.treeRedmaplePercentage", default = 100 },
+    { id = "dogwood", opt = "WDecay.treeDogwoodPercentage", default = 100 },
+    { id = "riverbirch", opt = "WDecay.treeRiverbirchPercentage", default = 100 },
+    { id = "americanlinden", opt = "WDecay.treeAmericanlindenPercentage", default = 100 },
+}
+
+local cachedSpeciesWeights = nil
+
+local function getSpeciesWeights()
+    if cachedSpeciesWeights then return cachedSpeciesWeights end
+
+    local weights = {}
+    local options = getSandboxOptions()
+    for i, entry in ipairs(SPECIES_OPTIONS) do
+        local value = nil
+        local option = options and options:getOptionByName(entry.opt)
+        if option then value = option:getValue() end
+        weights[i] = value ~= nil and value or entry.default
+    end
+    cachedSpeciesWeights = weights
+    return weights
+end
+
+-- Weighted random species pick honoring each species' sandbox percentage.
+-- Falls back to uniform selection if every weight is 0 (so disabling all
+-- species still yields trees rather than a crash).
+function WDecay_Trees.pickSpecies()
+    local weights = getSpeciesWeights()
+
+    local total = 0
+    for i = 1, #weights do total = total + weights[i] end
+
+    if total <= 0 then
+        return WDecay_Trees.species[randomizer:random(1, #WDecay_Trees.species)]
+    end
+
+    local roll = randomizer:random(1, total)
+    local acc = 0
+    for i = 1, #weights do
+        acc = acc + weights[i]
+        if roll <= acc then
+            return WDecay_Trees.species[i]
+        end
+    end
+
+    return WDecay_Trees.species[#WDecay_Trees.species]
+end
+
 -- Ground truth from decompiling vanilla's NatureTrees.init()/ErosionObj.setStageObject():
 -- frame = childSlot * columnMultiplier + column. "column" is which growth-stage/
 -- size-variant of that tier -- vanilla interleaves multiple stages into one
@@ -76,7 +132,7 @@ end
 -- Returns baseSpriteName, childSpriteName (childSpriteName may be nil: evergreen
 -- species, or winter, or currently snowing).
 function WDecay_Trees.pickTreeSprites()
-    local species = WDecay_Trees.species[randomizer:random(1, #WDecay_Trees.species)]
+    local species = WDecay_Trees.pickSpecies()
 
     local tiers = WDecay_Trees.normalTiers
     if randomizer:random(1, 100) <= getJumboXLXXLPercentage() then
@@ -126,6 +182,7 @@ end
 function WDecay_Trees.resetCaches()
     cachedBasePercentage = nil
     cachedBasePercentageOnRoad = nil
+    cachedSpeciesWeights = nil
 end
 
 return WDecay_Trees

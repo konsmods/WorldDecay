@@ -90,10 +90,21 @@ function WDecay_Grass.getIndoorBasePercentage()
     return cachedIndoorBase
 end
 
+local cachedRoofBase = nil
+function WDecay_Grass.getBasePercentageOnRoof()
+    if cachedRoofBase == nil then
+        local opt = getSandboxOptions():getOptionByName('WDecay.roofGrassPercentage')
+        cachedRoofBase = opt and opt:getValue() or 0
+    end
+
+    return cachedRoofBase
+end
+
 function WDecay_Grass.resetCaches()
     cachedBase = nil
     cachedBaseRoad = nil
     cachedIndoorBase = nil
+    cachedRoofBase = nil
 end
 
 return WDecay_Grass

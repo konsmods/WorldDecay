@@ -172,10 +172,21 @@ function WDecay_Bushes.getIndoorBasePercentage()
     return cachedBaseIndoor
 end
 
+local cachedBaseRoof = nil
+function WDecay_Bushes.getBasePercentageOnRoof()
+    if cachedBaseRoof == nil then
+        local opt = getSandboxOptions():getOptionByName('WDecay.bushesPercentageOnRoof')
+        cachedBaseRoof = opt and opt:getValue() or 0
+    end
+
+    return cachedBaseRoof
+end
+
 function WDecay_Bushes.resetCaches()
     cachedBase = nil
     cachedBaseRoad = nil
     cachedBaseIndoor = nil
+    cachedBaseRoof = nil
 end
 
 return WDecay_Bushes

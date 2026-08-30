@@ -19,7 +19,9 @@ local function LoadGridsquare(square, checkResult, level)
     if level ~= 0 and not checkResult.hasRoof then return end
 
     local percentage = 0
-    if checkResult.isIndoor then
+    if level ~= 0 and checkResult.hasRoof then
+        percentage = WDecay_Grass.getBasePercentageOnRoof()
+    elseif checkResult.isIndoor then
         percentage = WDecay_Grass.getIndoorBasePercentage()
     elseif checkResult.isRoad then
         percentage = WDecay_Grass.getBasePercentageOnRoad()
