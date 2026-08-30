@@ -32,6 +32,11 @@
 - Disable re-decay incremental inside Safehouses (?)
 
 - Noise-based spread / clustering of vegetation
+  - Today every eligible tile rolls `scaledPercentage >= random` independently (white noise): uniform speckle, no groves/thickets/meadows, and a chunk-boundary density jump is possible because the roll is chunk-local.
+  - Plan: deterministic value-noise / fBm field at absolute world coords (seeded with the per-world salt, like `wdecay_random`), used to modulate the spawn percentage: `percentage * factor`, factor ~mean-1 in `[1-strength, 1+strength]`.
+  - Per-category scales so trees clump into big forests (~16), bushes into medium patches (~9), grass fine (~6). Roads excluded (thin strips, clustering looks wrong there).
+  - Preserves average density (mean-normalized), seamless across chunk seams and redecay (absolute coords + fixed salt), still deterministic per world.
+  - Pluggable as a small shared module (e.g. `wdecay_noise`) + a couple of sandbox options (enable / strength; `strength == 0` reproduces old uniform rolls).
 
 ## Notes to self
 
