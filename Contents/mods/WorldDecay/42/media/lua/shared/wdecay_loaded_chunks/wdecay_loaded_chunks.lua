@@ -1,29 +1,67 @@
--- Matches vanilla's own ErosionMain.mainTimer() (the real body behind
--- EveryTenMinutes()): it walks ServerMap.instance.loadedCells -- the
--- server-authoritative "what's currently loaded" list, each holding an 8x8
--- grid of chunks -- not a per-player rendering/streaming radius. This gives
--- WDecay_*_Reseason.lua the same scope, and it's also just the more correct
--- source to use here anyway: these reseason modules are server-side scripts,
--- and IsoChunkMap (what this used to read) is a client-side rendering/
--- streaming construct that may not behave the same way (or exist at all) on
--- a true dedicated server with no local client attached.
+-- Originally tried to mirror vanilla's own ErosionMain.mainTimer() exactly,
+-- which walks ServerMap.instance.loadedCells -- but ServerMap turns out to
+-- NOT be a Lua-exposed class at all (confirmed by decompiling: no other class
+-- in the game, including the Lua exposure list, references it), so
+-- `ServerMap.instance` from Lua is just nil and indexing `.loadedCells` on it
+-- throws "attempted index: instance of non-table: null".
+--
+-- IsoCell/IsoChunkMap looked like a substitute, but it's keyed by *local*
+-- IsoPlayer.numPlayers (split-screen slots, not online player count), and
+-- IsoCell.getGridSquare() only forwards to the real ServerMap.getGridSquare()
+-- when GameServer.server is true -- IsoCell.getChunk() has no such branch, so
+-- it can't be trusted to reflect real server-loaded state either.
+--
+-- getSquare(x, y, z) (the plain global every mod already uses) DOES have that
+-- branch: on an actual server it calls straight through to
+-- ServerMap.getGridSquare(), which is a passive lookup into the currently-
+-- active ServerCell (verified via bytecode -- it returns nil rather than
+-- forcing a chunk load), so it's safe to probe with at arbitrary coordinates.
+-- We approximate "everything currently loaded" by sweeping a generous radius
+-- around each online player instead of enumerating a server-internal list --
+-- that's the same thing that determines what actually gets/stays loaded in
+-- the first place.
 local WDecay_LoadedChunks = {}
 
-local CELL_CHUNK_GRID = 8
+local CHUNK_SIZE = 10
+local RADIUS_CHUNKS = 15 -- ~150 tiles around each player
+local PROBE_MIN_LEVEL = -2
+local PROBE_MAX_LEVEL = 7
 
--- Calls fn(chunk) once for every chunk in every currently-loaded server cell.
-function WDecay_LoadedChunks.forEachLoadedChunk(fn)
-    local serverMap = ServerMap.instance
-    local cells = serverMap and serverMap.loadedCells
-    if not cells then return end
+-- Calls fn(square) once for every loaded square within range of any online
+-- player. Skips a whole chunk x z-level slice with a single nil probe rather
+-- than testing all 100 of its squares individually, since most of the swept
+-- volume above/below ground level is empty.
+function WDecay_LoadedChunks.forEachLoadedSquare(fn)
+    local players = getOnlinePlayers()
+    if not players then return end
 
-    for i = 0, cells:size() - 1 do
-        local cell = cells:get(i)
-        if cell and cell.isLoaded then
-            for cx = 0, CELL_CHUNK_GRID - 1 do
-                for cy = 0, CELL_CHUNK_GRID - 1 do
-                    local chunk = cell:getChunk(cx, cy)
-                    if chunk then fn(chunk) end
+    local seenChunks = {}
+
+    for i = 0, players:size() - 1 do
+        local player = players:get(i)
+        if player then
+            local originChunkX = math.floor(player:getX() / CHUNK_SIZE)
+            local originChunkY = math.floor(player:getY() / CHUNK_SIZE)
+
+            for ccx = originChunkX - RADIUS_CHUNKS, originChunkX + RADIUS_CHUNKS do
+                for ccy = originChunkY - RADIUS_CHUNKS, originChunkY + RADIUS_CHUNKS do
+                    local key = ccx .. "," .. ccy
+                    if not seenChunks[key] then
+                        seenChunks[key] = true
+                        local originX = ccx * CHUNK_SIZE
+                        local originY = ccy * CHUNK_SIZE
+
+                        for z = PROBE_MIN_LEVEL, PROBE_MAX_LEVEL do
+                            if getSquare(originX, originY, z) then
+                                for sx = 0, CHUNK_SIZE - 1 do
+                                    for sy = 0, CHUNK_SIZE - 1 do
+                                        local square = getSquare(originX + sx, originY + sy, z)
+                                        if square then fn(square) end
+                                    end
+                                end
+                            end
+                        end
+                    end
                 end
             end
         end

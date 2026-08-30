@@ -5,10 +5,10 @@
 -- live behavior: checked every ten minutes (matching vanilla's own
 -- ErosionMain.EveryTenMinutes() rate), but the actual sweep only runs when
 -- season or snow has actually changed since the last check. The sweep itself
--- covers every chunk currently loaded (see wdecay_loaded_chunks.lua), not a
--- guessed radius -- see WDecay_Trees_Reseason.lua for why. This also fixes
--- vines' multi-floor coverage for free: chunk-based iteration walks a
--- chunk's real min/max level, rather than the old fixed z-offset guess.
+-- covers a generous radius around every online player, probed level by level
+-- from -2 to 7 (see wdecay_loaded_chunks.lua for why -- see
+-- WDecay_Trees_Reseason.lua for the same rationale), which is what gives
+-- vines their multi-floor coverage.
 --
 -- Unlike the other three, vines aren't a standalone object at all --
 -- f_wallvines_1_* is WallOverlay-flagged in vanilla's tile definitions, so
@@ -98,7 +98,7 @@ Events.LoadChunk.Add(reseasonChunk)
 local warnedMissingLoadedChunks = false
 
 local function reseasonAllLoadedChunks()
-    if not (WDecay_LoadedChunks and WDecay_LoadedChunks.forEachLoadedChunk) then
+    if not (WDecay_LoadedChunks and WDecay_LoadedChunks.forEachLoadedSquare) then
         -- require() can fail on a brand-new shared module until the game is
         -- fully restarted (not just a save reload) -- don't let that turn
         -- into a repeating exception every ten minutes.
@@ -110,8 +110,8 @@ local function reseasonAllLoadedChunks()
     end
 
     local totalEvaluated, totalChanged = 0, 0
-    WDecay_LoadedChunks.forEachLoadedChunk(function(chunk)
-        local evaluated, changed = reseasonChunk(chunk)
+    WDecay_LoadedChunks.forEachLoadedSquare(function(square)
+        local evaluated, changed = reseasonSquare(square)
         totalEvaluated = totalEvaluated + evaluated
         totalChanged = totalChanged + changed
     end)

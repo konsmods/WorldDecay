@@ -4,9 +4,9 @@
 -- already-placed grass the same live behavior: checked every ten minutes
 -- (matching vanilla's own ErosionMain.EveryTenMinutes() rate), but the actual
 -- sweep only runs when season or snow has actually changed since the last
--- check. The sweep itself covers every chunk currently loaded (see
--- wdecay_loaded_chunks.lua), not a guessed radius -- see
--- WDecay_Trees_Reseason.lua for why.
+-- check. The sweep itself covers a generous radius around every online player
+-- (see wdecay_loaded_chunks.lua for why -- see WDecay_Trees_Reseason.lua for
+-- the same rationale).
 --
 -- Grass has no attached child sprite (unlike trees/bushes) -- its own base
 -- sprite changes with season, so this is just a straight sprite swap. It
@@ -81,7 +81,7 @@ Events.LoadChunk.Add(reseasonChunk)
 local warnedMissingLoadedChunks = false
 
 local function reseasonAllLoadedChunks()
-    if not (WDecay_LoadedChunks and WDecay_LoadedChunks.forEachLoadedChunk) then
+    if not (WDecay_LoadedChunks and WDecay_LoadedChunks.forEachLoadedSquare) then
         -- require() can fail on a brand-new shared module until the game is
         -- fully restarted (not just a save reload) -- don't let that turn
         -- into a repeating exception every ten minutes.
@@ -93,8 +93,8 @@ local function reseasonAllLoadedChunks()
     end
 
     local totalEvaluated, totalChanged = 0, 0
-    WDecay_LoadedChunks.forEachLoadedChunk(function(chunk)
-        local evaluated, changed = reseasonChunk(chunk)
+    WDecay_LoadedChunks.forEachLoadedSquare(function(square)
+        local evaluated, changed = reseasonSquare(square)
         totalEvaluated = totalEvaluated + evaluated
         totalChanged = totalChanged + changed
     end)

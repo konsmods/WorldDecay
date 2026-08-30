@@ -7,11 +7,9 @@
 -- the actual sweep only runs when season or snow has actually changed since
 -- the last check -- most ten-minute ticks are a no-op, same as vanilla's own
 -- per-object cooldown checks mostly finding nothing to do. The sweep itself
--- covers every chunk currently loaded (see wdecay_loaded_chunks.lua), not a
--- guessed radius -- vanilla's own erosion only actively updates loaded
--- chunks too (everything else is caught up from persisted state on next
--- load), and a fixed radius always either misses real loaded chunks or
--- wastes time on ones that aren't loaded.
+-- covers a generous radius around every online player (see
+-- wdecay_loaded_chunks.lua for why it's not vanilla's own loaded-cells list --
+-- that turned out not to be reachable from Lua at all).
 
 local WDecay_Trees = require('WDecay_Trees/WDecay_Trees')
 local WDecay_Season = require('wdecay_season/wdecay_season')
@@ -141,7 +139,7 @@ Events.LoadChunk.Add(reseasonChunk)
 local warnedMissingLoadedChunks = false
 
 local function reseasonAllLoadedChunks()
-    if not (WDecay_LoadedChunks and WDecay_LoadedChunks.forEachLoadedChunk) then
+    if not (WDecay_LoadedChunks and WDecay_LoadedChunks.forEachLoadedSquare) then
         -- require() can fail on a brand-new shared module until the game is
         -- fully restarted (not just a save reload) -- don't let that turn
         -- into a repeating exception every ten minutes.
@@ -153,8 +151,8 @@ local function reseasonAllLoadedChunks()
     end
 
     local totalEvaluated, totalChanged = 0, 0
-    WDecay_LoadedChunks.forEachLoadedChunk(function(chunk)
-        local evaluated, changed = reseasonChunk(chunk)
+    WDecay_LoadedChunks.forEachLoadedSquare(function(square)
+        local evaluated, changed = reseasonSquare(square)
         totalEvaluated = totalEvaluated + evaluated
         totalChanged = totalChanged + changed
     end)
