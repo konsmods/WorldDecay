@@ -1,6 +1,6 @@
 version=1
-id=3782424006
-title=World Decay [B42] [Playtest]
+id=3791219108
+title=World Decay [B42] [PLAYTEST]
 description=Transforms Knox County into a decaying post-apocalyptic wasteland. When each map chunk loads, the mod runs its generators procedurally: vegetation (trees, bushes, grass, vines), structural decay (cracks, burnt walls, broken doors and windows, bent fences), trash and barricades.
 description=
 description=It keeps a persistent chunk cache to skip already visited areas and a batched dispatcher to avoid lag spikes. It includes cleaning tools and full sandbox control over every element.
@@ -55,6 +55,5 @@ description=Manik_Goblyn - Manik's a Decade Later textures
 description=
 description=Contributions are welcome. If any texture pack author wants their work removed from this mod, it will be taken down on request.
 description=
-description=[b]Legacy version:[/b] Looking for the original World Decay? You can find it here: https://steamcommunity.com/sharedfiles/filedetails/?id=3782424006
 tags=Build 42;Balance;Multiplayer;Overhaul;Vehicles
 visibility=public
