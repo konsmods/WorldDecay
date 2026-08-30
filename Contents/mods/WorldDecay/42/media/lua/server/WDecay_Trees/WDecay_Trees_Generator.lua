@@ -26,7 +26,12 @@ local function LoadGridsquare(square, checkResult, level)
 
     if WDecay_Scaling.scaleFor('nature', percentage) >= randomizer:random(1, 100) then
         if not WDecay_Placement.isSafe(square) then return false end
-        return WDecay_Placement.createTagged(square, WDecay_Trees.getRandomTreeSprite(), "tree")
+        local baseSprite, childSprite = WDecay_Trees.pickTreeSprites()
+        local tree = WDecay_Placement.createTaggedObject(square, baseSprite, "tree")
+        if tree and childSprite and getSprite(childSprite) then
+            tree:addAttachedAnimSpriteByName(childSprite)
+        end
+        return tree ~= nil
     end
 
     return false

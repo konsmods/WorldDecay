@@ -1,7 +1,7 @@
 local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
-local WDecay_Placement = require('wdecay_placement/wdecay_placement')
+local WDecay_CleanVegetation = require('wdecay_cleanvegetation/wdecay_cleanvegetation')
 local WDecay_Vines = require('WDecay_Vines/WDecay_Vines')
 local WDecay_Vines_SpriteRules = require('WDecay_Vines/WDecay_Vines_SpriteRules')
 local PROP_FENCE_LOW = IsoPropertyType.lookup("FenceTypeLow")
@@ -14,9 +14,6 @@ local PROP_WINDOW_N = IsoPropertyType.lookup("WindowN"); local PROP_DOOR_N = Iso
 local PROP_DOOR_WALL_N = IsoPropertyType.lookup("DoorWallN"); local PROP_WALL_N_TRANS = IsoPropertyType.lookup("WallNTrans")
 local PROP_ATTACHED_N = IsoPropertyType.lookup("attachedN"); local PROP_ATTACHED_S = IsoPropertyType.lookup("attachedS")
 local SPRITE_FENCE = "fence"; local SPRITE_FENCING = "fencing_"
-local getLowW = WDecay_Vines.getRandomWallWLow; local getW = WDecay_Vines.getRandomWallW; local getTopW = WDecay_Vines.getRandomWallWTop
-local getLowN = WDecay_Vines.getRandomWallNLow; local getN = WDecay_Vines.getRandomWallN; local getTopN = WDecay_Vines.getRandomWallNTop
-local getLowNW = WDecay_Vines.getRandomWallNWLow; local getNW = WDecay_Vines.getRandomWallNW; local getTopNW = WDecay_Vines.getRandomWallNWTop
 local randomizer = WDecay_Random.get()
 local TIME_KEY = "WDecay_Vines-LoadGridsquare"
 local cvp=nil; local function getVP() if cvp==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinePercentage'); cvp=o and o:getValue() or 80 end; return cvp end
@@ -34,11 +31,17 @@ local function getFence(objects)
     end
     return nil
 end
+-- f_wallvines_1_* sprites are WallOverlay-flagged in vanilla's own tile
+-- definitions, so createTile() applies them onto the existing wall/fence
+-- object (square:getWall()) rather than creating a new standalone object --
+-- there's never a new object for a modData tag to land on. Detecting "does
+-- this square already have one of our vines" has to check the overlay sprite
+-- itself, same as WDecay_CleanVegetation already does for cleanup.
 local function squareHasVine(square,objs)
     if not square then return true end
     objs=objs or square:getObjects(); if not objs then return false end
-    for i=0,objs:size()-1 do local md=objs:get(i):getModData()
-        if md and md["WDecay_Cleanable"]=="vine" then return true end
+    for i=0,objs:size()-1 do local obj=objs:get(i)
+        if obj and WDecay_Vines.isVine(WDecay_CleanVegetation.getOverlaySpriteName(obj)) then return true end
     end
     return false
 end
@@ -56,14 +59,14 @@ local function createVine(square,obj,isLow,objs)
     if WDecay_Vines_SpriteRules.matches(sprN, WDecay_Vines_SpriteRules.skip) then return end
     if WDecay_Vines_SpriteRules.matches(sprN, WDecay_Vines_SpriteRules.forceLow) then isLow=true end
     local props=obj:getProperties(); if not props then return end
-    local lf,f,tf=nil,nil,nil
-    if props:has(PROP_WALL_NW,PROP_ATTACHED_NW) then lf,f,tf=getLowNW,getNW,getTopNW
-    elseif props:has(PROP_WALL_N,PROP_WINDOW_N,PROP_DOOR_N,PROP_DOOR_WALL_N,PROP_WALL_N_TRANS,PROP_ATTACHED_N,PROP_ATTACHED_S) then lf,f,tf=getLowN,getN,getTopN
-    elseif props:has(PROP_WALL_W,PROP_WINDOW_W,PROP_DOOR_W,PROP_DOOR_WALL_W,PROP_ATTACHED_W,PROP_WALL_W_TRANS,PROP_ATTACHED_E) then lf,f,tf=getLowW,getW,getTopW
+    local direction=nil
+    if props:has(PROP_WALL_NW,PROP_ATTACHED_NW) then direction="NW"
+    elseif props:has(PROP_WALL_N,PROP_WINDOW_N,PROP_DOOR_N,PROP_DOOR_WALL_N,PROP_WALL_N_TRANS,PROP_ATTACHED_N,PROP_ATTACHED_S) then direction="N"
+    elseif props:has(PROP_WALL_W,PROP_WINDOW_W,PROP_DOOR_W,PROP_DOOR_WALL_W,PROP_ATTACHED_W,PROP_WALL_W_TRANS,PROP_ATTACHED_E) then direction="W"
     else return end
-    local sn=nil
-    if isLow and lf then
-        sn=lf()
+    local tier=nil
+    if isLow then
+        tier="low"
     else
         local hasAbove=false
         if square:getZ()==0 then
@@ -72,11 +75,13 @@ local function createVine(square,obj,isLow,objs)
             local above=square:getSquareAbove()
             if above and above:getWall() then hasAbove=true end
         end
-        if hasAbove and f then sn=f()
-        elseif tf then sn=tf()
-        elseif f then sn=f() end
+        tier = hasAbove and "full" or "top"
     end
-    if sn then WDecay_Placement.createTagged(square, sn, "vine") end
+    local sn=WDecay_Vines.pickSprite(direction, tier)
+    if sn then
+        obj:setOverlaySprite(sn, 1.0, 1.0, 1.0, 1.0)
+        obj:transmitUpdatedSpriteToClients()
+    end
 end
 local function LoadGridsquare(square,checkResult,level)
     if not checkResult then return end

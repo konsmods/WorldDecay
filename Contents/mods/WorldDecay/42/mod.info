@@ -3,6 +3,6 @@ id=WorldDecay
 description=Transforms Knox County into a decaying post-apocalyptic wasteland. Advanced vegetation, urban decay, abandoned vehicles, barricades, trash, and a full cleaning system. Fully configurable via sandbox options. Back up saves before enabling or removing.
 poster=Poster.png
 pzversion=42
-modversion=2.0.2
+modversion=2.1.0
 versionMin=42.20.0
 author=SIMD - Ledezma

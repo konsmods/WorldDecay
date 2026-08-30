@@ -241,12 +241,17 @@ local carryCategories = {
             return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
         end,
         hasExisting = function(square, objects)
-            return squareHasSprite(square, { "e_americanholly", "e_canadianhemlock", "e_virginiapine" }, "tree", objects)
+            return squareHasSprite(square, WDecay_Trees.getSpritePrefixes(), "tree", objects)
         end,
         basePercent = function() return WDecay_Trees.getBasePercentage() end,
         place = function(square)
             if not WDecay_Placement.isSafe(square) then return false end
-            return WDecay_Placement.createTagged(square, WDecay_Trees.getRandomTreeSprite(), "tree")
+            local baseSprite, childSprite = WDecay_Trees.pickTreeSprites()
+            local tree = WDecay_Placement.createTaggedObject(square, baseSprite, "tree")
+            if tree and childSprite and getSprite(childSprite) then
+                tree:addAttachedAnimSpriteByName(childSprite)
+            end
+            return tree ~= nil
         end,
     },
     {
@@ -259,12 +264,17 @@ local carryCategories = {
                 and checkResult.isRoad == true and WDecay_Trees.getBasePercentageOnRoad() > 0
         end,
         hasExisting = function(square, objects)
-            return squareHasSprite(square, { "e_americanholly", "e_canadianhemlock", "e_virginiapine" }, "tree", objects)
+            return squareHasSprite(square, WDecay_Trees.getSpritePrefixes(), "tree", objects)
         end,
         basePercent = function() return WDecay_Trees.getBasePercentageOnRoad() end,
         place = function(square)
             if not WDecay_Placement.isSafe(square) then return false end
-            return WDecay_Placement.createTagged(square, WDecay_Trees.getRandomTreeSprite(), "tree")
+            local baseSprite, childSprite = WDecay_Trees.pickTreeSprites()
+            local tree = WDecay_Placement.createTaggedObject(square, baseSprite, "tree")
+            if tree and childSprite and getSprite(childSprite) then
+                tree:addAttachedAnimSpriteByName(childSprite)
+            end
+            return tree ~= nil
         end,
     },
     {
@@ -281,7 +291,7 @@ local carryCategories = {
         end,
         place = function(square)
             if not WDecay_Placement.isSafe(square) then return false end
-            return WDecay_Placement.createTagged(square, WDecay_Bushes.getRandomBush(), "bush")
+            return WDecay_Bushes.spawnBush(square) ~= nil
         end,
     },
     {
@@ -299,7 +309,7 @@ local carryCategories = {
         end,
         place = function(square)
             if not WDecay_Placement.isSafe(square) then return false end
-            return WDecay_Placement.createTagged(square, WDecay_Bushes.getRandomBush(), "bush")
+            return WDecay_Bushes.spawnBush(square) ~= nil
         end,
     },
     {
@@ -319,7 +329,7 @@ local carryCategories = {
         end,
         place = function(square)
             if not WDecay_Placement.isSafe(square) then return false end
-            return WDecay_Placement.createTagged(square, WDecay_Bushes.getRandomBush(), "bush")
+            return WDecay_Bushes.spawnBush(square) ~= nil
         end,
     },
     {
@@ -336,7 +346,7 @@ local carryCategories = {
         end,
         place = function(square)
             if not WDecay_Placement.isSafe(square) then return false end
-            return WDecay_Placement.createTagged(square, WDecay_Grass.getRandomVanillaGrass(), "grass")
+            return WDecay_Grass.spawnGrass(square) ~= nil
         end,
     },
     {
@@ -354,7 +364,7 @@ local carryCategories = {
         end,
         place = function(square)
             if not WDecay_Placement.isSafe(square) then return false end
-            return WDecay_Placement.createTagged(square, WDecay_Grass.getRandomVanillaGrass(), "grass")
+            return WDecay_Grass.spawnGrass(square) ~= nil
         end,
     },
     {
@@ -375,7 +385,7 @@ local carryCategories = {
         end,
         place = function(square)
             if not WDecay_Placement.isSafe(square) then return false end
-            return WDecay_Placement.createTagged(square, WDecay_Grass.getRandomVanillaGrass(), "grass")
+            return WDecay_Grass.spawnGrass(square) ~= nil
         end,
     },
 }

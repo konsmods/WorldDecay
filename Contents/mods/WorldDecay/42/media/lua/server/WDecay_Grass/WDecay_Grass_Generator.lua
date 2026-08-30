@@ -31,7 +31,7 @@ local function LoadGridsquare(square, checkResult, level)
 
     if WDecay_Scaling.scaleFor('nature', percentage) >= randomizer:random(1, 100) then
         if not WDecay_Placement.isSafe(square) then return false end
-        return WDecay_Placement.createTagged(square, WDecay_Grass.getRandomVanillaGrass(), "grass")
+        return WDecay_Grass.spawnGrass(square) ~= nil
     end
 
     return false

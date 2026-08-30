@@ -1,77 +1,52 @@
 local WDecay_Random = require('wdecay_random/wdecay_random')
+local WDecay_Season = require('wdecay_season/wdecay_season')
 
 local randomizer = WDecay_Random.get()
 
 local WDecay_Vines = {}
 
-WDecay_Vines.wallW = {
-    "f_wallvines_1_43",
-    "f_wallvines_1_42",
-    "f_wallvines_1_37",
-    "f_wallvines_1_36",
-    "f_wallvines_1_31",
-    "f_wallvines_1_30",
-    "f_wallvines_1_25",
-    "f_wallvines_1_24"
-}
+WDecay_Vines.SPRITE_PREFIX = "f_wallvines_1_"
 
-WDecay_Vines.wallW_top = {
-    "f_wallvines_1_31",
-    "f_wallvines_1_30",
-    "f_wallvines_1_25",
-    "f_wallvines_1_24"
-}
+-- Ground truth from decompiling vanilla's WallVines.init()/constructor.
+-- Vines use a different vanilla class pair (ErosionObjOverlay/
+-- ErosionObjOverlaySprites) than trees/bushes/grass, but the underlying
+-- mechanism is the same attached-sprite trick, and the frame formula reduces
+-- to the same shape once cross-checked against WorldDecay's own existing
+-- (season-less) frame lists below:
+--   frame = seasonIndex*24 + stage*6 + variety
+-- "variety" (0-5) directly encodes wall direction in vanilla's data --
+-- WorldDecay's existing wallW/wallN/wallNW frame lists are exactly the
+-- seasonIndex=1 slice of this formula for variety pairs {0,1}/{2,3}/{4,5}
+-- respectively -- and "stage" (0-3) is coverage amount, matching WorldDecay's
+-- existing low(stage 0 only) / top (stage 0-1) / full (stage 0-3) tiers.
+-- seasonIndex: vanilla registers Winter+lateAutumn=5->index0 (dead/bare),
+-- Summer-early=2->index1 (peak growth -- what WorldDecay always used before),
+-- and reuses the SAME frames for both Summer-late/earlyAutumn=4 and Spring=1
+-- ->index2 (vanilla's own "regrowth" look, shared between both seasons).
+local DIRECTION_VARIETIES = { W = { 0, 1 }, N = { 2, 3 }, NW = { 4, 5 } }
+local TIER_STAGES = { low = { 0 }, top = { 0, 1 }, full = { 0, 1, 2, 3 } }
+local SEASON_NAME_TO_INDEX = { Spring = 2, Summer = 1, Autumn = 2, Winter = 0 }
 
-WDecay_Vines.wallW_low = {
-    "f_wallvines_1_25",
-    "f_wallvines_1_24"
-}
+function WDecay_Vines.spriteName(seasonIndex, stage, variety)
+    return WDecay_Vines.SPRITE_PREFIX .. (seasonIndex * 24 + stage * 6 + variety)
+end
 
-WDecay_Vines.wallN = {
-    "f_wallvines_1_45",
-    "f_wallvines_1_44",
-    "f_wallvines_1_39",
-    "f_wallvines_1_38",
-    "f_wallvines_1_33",
-    "f_wallvines_1_32",
-    "f_wallvines_1_27",
-    "f_wallvines_1_26"
-}
+function WDecay_Vines.getCurrentSeasonIndex()
+    local seasonName = WDecay_Season.getSeasonName()
+    return (seasonName and SEASON_NAME_TO_INDEX[seasonName]) or 1
+end
 
-WDecay_Vines.wallN_top = {
-    "f_wallvines_1_33",
-    "f_wallvines_1_32",
-    "f_wallvines_1_27",
-    "f_wallvines_1_26"
-}
+-- direction: "W"/"N"/"NW". tier: "low"/"top"/"full". Returns spriteName, or
+-- nil if direction/tier is unrecognized.
+function WDecay_Vines.pickSprite(direction, tier)
+    local varieties = DIRECTION_VARIETIES[direction]
+    local stages = TIER_STAGES[tier]
+    if not varieties or not stages then return nil end
 
-WDecay_Vines.wallN_low = {
-    "f_wallvines_1_27",
-    "f_wallvines_1_26"
-}
-
-WDecay_Vines.wallNW = {
-    "f_wallvines_1_47",
-    "f_wallvines_1_46",
-    "f_wallvines_1_41",
-    "f_wallvines_1_40",
-    "f_wallvines_1_34",
-    "f_wallvines_1_35",
-    "f_wallvines_1_29",
-    "f_wallvines_1_28"
-}
-
-WDecay_Vines.wallNW_top = {
-    "f_wallvines_1_35",
-    "f_wallvines_1_34",
-    "f_wallvines_1_29",
-    "f_wallvines_1_28"
-}
-
-WDecay_Vines.wallNW_low = {
-    "f_wallvines_1_29",
-    "f_wallvines_1_28"
-}
+    local variety = varieties[randomizer:random(1, #varieties)]
+    local stage = stages[randomizer:random(1, #stages)]
+    return WDecay_Vines.spriteName(WDecay_Vines.getCurrentSeasonIndex(), stage, variety)
+end
 
 WDecay_Vines.wallProperties = {
     "WallNW",
@@ -82,78 +57,6 @@ WDecay_Vines.wallProperties = {
     "DoorWallW",
     "DoorWallN"
 }
-
-function WDecay_Vines.getRandomWallW()
-    if #WDecay_Vines.wallW == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallW[randomizer:random(1, #WDecay_Vines.wallW)]
-end
-
-function WDecay_Vines.getRandomWallWTop()
-    if #WDecay_Vines.wallW_top == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallW_top[randomizer:random(1, #WDecay_Vines.wallW_top)]
-end
-
-function WDecay_Vines.getRandomWallWLow()
-    if #WDecay_Vines.wallW_low == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallW_low[randomizer:random(1, #WDecay_Vines.wallW_low)]
-end
-
-function WDecay_Vines.getRandomWallN()
-    if #WDecay_Vines.wallN == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallN[randomizer:random(1, #WDecay_Vines.wallN)]
-end
-
-function WDecay_Vines.getRandomWallNTop()
-    if #WDecay_Vines.wallN_top == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallN_top[randomizer:random(1, #WDecay_Vines.wallN_top)]
-end
-
-function WDecay_Vines.getRandomWallNLow()
-    if #WDecay_Vines.wallN_low == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallN_low[randomizer:random(1, #WDecay_Vines.wallN_low)]
-end
-
-function WDecay_Vines.getRandomWallNW()
-    if #WDecay_Vines.wallNW == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallNW[randomizer:random(1, #WDecay_Vines.wallNW)]
-end
-
-function WDecay_Vines.getRandomWallNWTop()
-    if #WDecay_Vines.wallNW_top == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallNW_top[randomizer:random(1, #WDecay_Vines.wallNW_top)]
-end
-
-function WDecay_Vines.getRandomWallNWLow()
-    if #WDecay_Vines.wallNW_low == 0 then
-        return nil
-    end
-
-    return WDecay_Vines.wallNW_low[randomizer:random(1, #WDecay_Vines.wallNW_low)]
-end
 
 function WDecay_Vines.isVine(spriteName)
     if not spriteName then return false end
