@@ -1,6 +1,6 @@
 version=1
 id=3791219108
-title=World Decay [B42] [PLAYTEST]
+title=World Decay [B42] [Playtest]
 description=Transforms Knox County into a decaying post-apocalyptic wasteland. When each map chunk loads, the mod runs its generators procedurally: vegetation (trees, bushes, grass, vines), structural decay (cracks, burnt walls, broken doors and windows, bent fences), trash and barricades.
 description=
 description=It keeps a persistent chunk cache to skip already visited areas and a batched dispatcher to avoid lag spikes. It includes cleaning tools and full sandbox control over every element.
