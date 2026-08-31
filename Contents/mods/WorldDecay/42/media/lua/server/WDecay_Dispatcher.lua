@@ -686,6 +686,7 @@ local function processChunkSquares(chunk, key, deadline)
         chunkWork[key] = nil
         return false
     end
+    if WDecay_Overlays_ApplyToChunk then WDecay_Overlays_ApplyToChunk(chunk) end
     state.markerData["WDecay_done"] = CACHE_VERSION
     local nowDays = WDecay_Scaling.getWorldAgeDays()
     if nowDays then state.markerData["WDecay_doneAtDays"] = math.floor(nowDays) end

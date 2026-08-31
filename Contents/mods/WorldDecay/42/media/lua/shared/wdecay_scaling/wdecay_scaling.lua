@@ -292,10 +292,7 @@ function WDecay_Scaling.getSeasonFactor(kind)
     local isSummer = month >= 5 and month <= 7
     local isAutumn = month >= 8 and month <= 10
 
-    if kind == 'dryGrass' then
-        if isWinter then return 1.5 end
-        if isSummer then return 0.6 end
-    elseif kind == 'grass' then
+    if kind == 'grass' then
         if isWinter then return 0.6 end
         if isSummer then return 1.25 end
     elseif kind == 'leaves' then

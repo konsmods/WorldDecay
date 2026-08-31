@@ -163,7 +163,7 @@ local cachedBasePercentage = nil
 function WDecay_Trees.getBasePercentage()
     if cachedBasePercentage == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.treePercentage')
-        cachedBasePercentage = opt and opt:getValue() or 17
+        cachedBasePercentage = opt and opt:getValue() or 10
     end
 
     return cachedBasePercentage

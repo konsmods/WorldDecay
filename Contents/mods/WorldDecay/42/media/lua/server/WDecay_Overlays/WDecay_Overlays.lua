@@ -4,6 +4,7 @@ local Tiles = require("WDecay_Overlays/Data/Tiles")
 local Sprites = require("WDecay_Overlays/Data/Sprites")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_SquareCheck = require('wdecay_squarecheck/wdecay_squarecheck')
 
 local randomizer = WDecay_Random.get()
 
@@ -21,7 +22,44 @@ local function sb(key, fallback)
     return sandboxCache[key]
 end
 
-local OVERLAY_DENSITY = 60
+-- Tile overlays use a 1-in-N chance. Calibrate that chance against the same
+-- 0-100 values used by object placement, so a setting of 25 means roughly
+-- one eligible floor tile in four receives an overlay from the pool.
+local OVERLAY_DENSITY = 100
+
+local indoorOverlayRegistered = {}
+local roofOverlayRegistered = {}
+local lazyOverlayConfigs = {
+    indoor = {
+        registered = indoorOverlayRegistered,
+        percentages = {
+            { key = 'indoorOverlayGrassPercentage', default = 55, sprites = Sprites.vanilla },
+            { key = 'indoorOverlayCustomGrassPercentage', default = 35, sprites = Sprites.custom },
+            { key = 'indoorOverlayCrackPercentage', default = 25, sprites = Sprites.crack },
+            { key = 'indoorOverlayLeavesPercentage', default = 35, sprites = Sprites.leaves },
+            { key = 'indoorOverlayDebrisPercentage', default = 30, sprites = Sprites.debris },
+            { key = 'indoorOverlayTrashPercentage', default = 30, sprites = Sprites.trash },
+        }
+    },
+    roof = {
+        registered = roofOverlayRegistered,
+        percentages = {
+            { key = 'roofOverlayGrassPercentage', default = 55, sprites = Sprites.vanilla },
+            { key = 'roofOverlayCustomGrassPercentage', default = 35, sprites = Sprites.custom },
+            { key = 'roofOverlayCrackPercentage', default = 25, sprites = Sprites.crack },
+            { key = 'roofOverlayLeavesPercentage', default = 35, sprites = Sprites.leaves },
+            { key = 'roofOverlayDebrisPercentage', default = 30, sprites = Sprites.debris },
+            { key = 'roofOverlayTrashPercentage', default = 25, sprites = Sprites.trash },
+        }
+    },
+}
+
+local function clearLazyOverlayCache()
+    indoorOverlayRegistered = {}
+    roofOverlayRegistered = {}
+    lazyOverlayConfigs.indoor.registered = indoorOverlayRegistered
+    lazyOverlayConfigs.roof.registered = roofOverlayRegistered
+end
 
 local function computeChance(intensity)
     local mult = WDecay_Scaling.getMultiplierFor('nature')
@@ -48,18 +86,20 @@ end
 local function registerTileOverlays()
     if TILEZED then return end
 
-    local gNat = seasonAdj(sb('grassPercentage', 30), 'grass')
-    local gRoad = seasonAdj(sb('grassPercentageOnRoad', 20), 'grass')
-    local cNat = sb('customGrassPercentage', 10)
-    local cRoad = sb('customGrassPercentageOnRoad', 10)
-    local dNat = seasonAdj(sb('dryGrassPercentage', 15), 'dryGrass')
-    local dRoad = seasonAdj(sb('dryGrassPercentageOnRoad', 10), 'dryGrass')
-    local lNat = seasonAdj(sb('floorLeavesPercentage', 10), 'leaves')
-    local lRoad = seasonAdj(sb('floorLeavesPercentageOnRoad', 5), 'leaves')
+    clearLazyOverlayCache()
+
+    local gNat = seasonAdj(sb('grassPercentage', 35), 'grass')
+    local gRoad = seasonAdj(sb('grassPercentageOnRoad', 30), 'grass')
+    local cNat = sb('customGrassPercentage', 20)
+    local cRoad = sb('customGrassPercentageOnRoad', 15)
+    local lNat = seasonAdj(sb('floorLeavesPercentage', 20), 'leaves')
+    local lRoad = seasonAdj(sb('floorLeavesPercentageOnRoad', 15), 'leaves')
     local bNat = sb('groundDebrisPercentage', 15)
-    local bRoad = sb('groundDebrisPercentageOnRoad', 8)
-    local trash = sb('trashPercentage', 8)
-    local crack = sb('roadCrackOverlayPercentage', 10)
+    local bRoad = sb('groundDebrisPercentageOnRoad', 10)
+    local trashNat = sb('trashPercentage', 10)
+    local trashRoad = sb('trashPercentageOnRoad', 10)
+    local crackNat = sb('dirtCrackOverlayPercentage', 10)
+    local crackRoad = sb('roadCrackOverlayPercentage', 10)
 
     local registry = {}
 
@@ -67,10 +107,11 @@ local function registerTileOverlays()
         local pool = {}
         mixSprites(Sprites.vanilla, pool, gNat)
         mixSprites(Sprites.custom, pool, cNat)
-        mixSprites(Sprites.dry, pool, dNat)
         mixSprites(Sprites.leaves, pool, lNat)
         mixSprites(Sprites.debris, pool, bNat)
-        local top = math.max(gNat, cNat, dNat, lNat, bNat)
+        mixSprites(Sprites.trash, pool, trashNat)
+        mixSprites(Sprites.crack, pool, crackNat)
+        local top = math.max(gNat, cNat, lNat, bNat, trashNat, crackNat)
         if #pool > 0 and top > 0 then
             registry[tile] = {{ name = "other", chance = computeChance(top), usage = "", tiles = pool }}
         end
@@ -80,12 +121,11 @@ local function registerTileOverlays()
         local pool = {}
         mixSprites(Sprites.vanilla, pool, gRoad)
         mixSprites(Sprites.custom, pool, cRoad)
-        mixSprites(Sprites.dry, pool, dRoad)
         mixSprites(Sprites.leaves, pool, lRoad)
         mixSprites(Sprites.debris, pool, bRoad)
-        mixSprites(Sprites.trash, pool, trash)
-        mixSprites(Sprites.crack, pool, crack)
-        local top = math.max(gRoad, cRoad, dRoad, lRoad, bRoad, trash, crack)
+        mixSprites(Sprites.trash, pool, trashRoad)
+        mixSprites(Sprites.crack, pool, crackRoad)
+        local top = math.max(gRoad, cRoad, lRoad, bRoad, trashRoad, crackRoad)
         if #pool > 0 and top > 0 then
             registry[tile] = {{ name = "other", chance = computeChance(top), usage = "", tiles = pool }}
         end
@@ -153,19 +193,32 @@ local function stripFloorOverlays(floor)
     return removed
 end
 
-local function hasAnyOverlay(floor)
-    local attached = floor:getAttachedAnimSprite()
-    if not attached then return false end
+local function registerLazyOverlay(tileName, config)
+    local registered = config.registered
+    if registered[tileName] then return true end
+    registered[tileName] = true
 
-    for n = 0, attached:size() - 1 do
-        local sp = attached:get(n)
-        local parent = sp and sp:getParentSprite()
-        if isOverlayName(parent and parent:getName()) then
-            return true
+    local pool = {}
+    local top = 0
+    for _, entry in ipairs(config.percentages) do
+        local intensity = sb(entry.key, entry.default)
+        mixSprites(entry.sprites, pool, intensity)
+        if intensity > top then
+            top = intensity
         end
     end
 
+    if #pool > 0 and top > 0 then
+        getTileOverlays():addOverlays({ [tileName] = { { name = "other", chance = computeChance(top), usage = "", tiles = pool } } })
+        return true
+    end
+
     return false
+end
+
+local function isEligibleIndoorOverlay(square, checkResult)
+    return square and checkResult and not checkResult.cleaned
+        and checkResult.isIndoor == true and square:getFloor() ~= nil
 end
 
 function WDecay_Overlays_ApplyToChunk(chunk)
@@ -174,17 +227,45 @@ function WDecay_Overlays_ApplyToChunk(chunk)
     local overlays = getTileOverlays()
     if not overlays then return end
 
-    for y = 0, 7 do
-        for x = 0, 7 do
-            local square = chunk:getGridSquare(x, y, 0)
-            local floor = square and square:getFloor()
-            if floor and not (square:getModData()["WDecay_cleaned"]) then
-                if not hasAnyOverlay(floor) then
-                    overlays:updateTileOverlaySprite(floor)
-                    if hasAnyOverlay(floor) then
-                        floor:getModData()["WDecay_OverlayApplied"] = true
-                        floor:transmitModData()
-                        floor:transmitUpdatedSpriteToClients()
+    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
+        for y = 0, 7 do
+            for x = 0, 7 do
+                local square = chunk:getGridSquare(x, y, z)
+                local floor = square and square:getFloor()
+                local floorData = floor and floor:getModData()
+                if floor and floorData and not floorData["WDecay_OverlayApplied"] then
+                    local checkResult = WDecay_SquareCheck.checkAll(square, z)
+                    local sprite = floor:getSprite()
+                    local tileName = sprite and sprite:getName()
+                    local shouldUpdate = false
+
+                    if tileName and isEligibleIndoorOverlay(square, checkResult) then
+                        shouldUpdate = registerLazyOverlay(tileName, lazyOverlayConfigs.indoor)
+                    elseif tileName and checkResult and checkResult.hasRoof then
+                        shouldUpdate = registerLazyOverlay(tileName, lazyOverlayConfigs.roof)
+                    elseif z == 0 and checkResult and not checkResult.cleaned then
+                        shouldUpdate = true
+                    end
+
+                    if shouldUpdate then
+                        overlays:updateTileOverlaySprite(floor)
+                        local attached = floor:getAttachedAnimSprite()
+                        local applied = false
+                        if attached then
+                            for n = 0, attached:size() - 1 do
+                                local attachedSprite = attached:get(n)
+                                local parent = attachedSprite and attachedSprite:getParentSprite()
+                                if isOverlayName(parent and parent:getName()) then
+                                    applied = true
+                                    break
+                                end
+                            end
+                        end
+                        if applied then
+                            floorData["WDecay_OverlayApplied"] = true
+                            floor:transmitModData()
+                            floor:transmitUpdatedSpriteToClients()
+                        end
                     end
                 end
             end

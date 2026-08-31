@@ -1,10 +1,16 @@
+[h1]2.1.2[/h1]
+[list]
+[*]Standardized overlay density calibration and expanded Indoor/Roof overlay controls.
+[*]Reduced default grass object density and added wooden/metal barricade weights.
+[*]Removed blank overlay sprites and reduced default vine density.
+[/list]
+
 [h1]2.1.1[/h1]
 [list]
 [*]Added per-tree-species sandbox options so each tree type can be tuned or disabled individually.
 [*]Added Bush Percentage (Roofs) and wired up Roof Grass Percentage (previously unused) for real roof overgrowth.
 [*]Texture submods no longer depend on the core WorldDecay mod (removed the hard require).
-[*]Rebalanced defaults: tree 10, bush 25, vine 70, bush-on-road 2.
-[*]Credits updated.
+[*]Rebalanced defaults.
 [/list]
 
 [h1]2.1.0[/h1]

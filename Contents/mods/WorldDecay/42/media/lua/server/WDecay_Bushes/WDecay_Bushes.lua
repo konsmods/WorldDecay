@@ -148,7 +148,7 @@ local cachedBaseIndoor = nil
 function WDecay_Bushes.getBasePercentage()
     if cachedBase == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.bushesPercentage')
-        cachedBase = opt and opt:getValue() or 20
+        cachedBase = opt and opt:getValue() or 25
     end
 
     return cachedBase
@@ -157,7 +157,7 @@ end
 function WDecay_Bushes.getBasePercentageOnRoad()
     if cachedBaseRoad == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.bushesPercentageOnRoad')
-        cachedBaseRoad = opt and opt:getValue() or 0
+        cachedBaseRoad = opt and opt:getValue() or 2
     end
 
     return cachedBaseRoad
@@ -166,7 +166,7 @@ end
 function WDecay_Bushes.getIndoorBasePercentage()
     if cachedBaseIndoor == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.indoorBushesPercentage')
-        cachedBaseIndoor = opt and opt:getValue() or 0
+        cachedBaseIndoor = opt and opt:getValue() or 10
     end
 
     return cachedBaseIndoor
@@ -176,7 +176,7 @@ local cachedBaseRoof = nil
 function WDecay_Bushes.getBasePercentageOnRoof()
     if cachedBaseRoof == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.bushesPercentageOnRoof')
-        cachedBaseRoof = opt and opt:getValue() or 0
+        cachedBaseRoof = opt and opt:getValue() or 5
     end
 
     return cachedBaseRoof

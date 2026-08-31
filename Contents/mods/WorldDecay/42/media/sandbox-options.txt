@@ -272,14 +272,6 @@ option WDecay.jumboXLXXLPercentage
 	translation = WDecay_jumboXLXXLPercentage,
 }
 
-option Text.WDecay_Divider_Nature_TreeSpecies
-{
-	type = boolean,
-	default = true,
-	page = WDecay_Nature,
-	translation = WDecay_Divider_Nature_TreeSpecies,
-}
-
 option WDecay.treeRedmaplePercentage
 {
 	type = integer,
@@ -398,32 +390,52 @@ option WDecay.bushesPercentageOnRoof
 	translation = WDecay_bushesPercentageOnRoof,
 }
 
-option Text.WDecay_Divider_Nature_Grass
+option Text.WDecay_Divider_Nature_Overlays
 {
 	type = boolean,
 	default = true,
 	page = WDecay_Nature,
-	translation = WDecay_Divider_Nature_Grass,
+	translation = WDecay_Divider_Nature_Overlays,
 }
 
-option WDecay.grassPercentage
+option WDecay.dirtCrackOverlayPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 10,
+	page = WDecay_Nature,
+	translation = WDecay_dirtCrackOverlayPercentage,
+}
+
+option WDecay.roadCrackOverlayPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 5,
+	page = WDecay_Nature,
+	translation = WDecay_roadCrackOverlayPercentage,
+}
+
+option WDecay.indoorOverlayCrackPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 15,
+	page = WDecay_Nature,
+	translation = WDecay_indoorOverlayCrackPercentage,
+}
+
+option WDecay.roofOverlayCrackPercentage
 {
 	type = integer,
 	min = 0,
 	max = 100,
 	default = 20,
 	page = WDecay_Nature,
-	translation = WDecay_grassPercentage,
-}
-
-option WDecay.grassPercentageOnRoad
-{
-	type = integer,
-	min = 0,
-	max = 100,
-	default = 20,
-	page = WDecay_Nature,
-	translation = WDecay_grassPercentageOnRoad,
+	translation = WDecay_roofOverlayCrackPercentage,
 }
 
 option WDecay.customGrassPercentage
@@ -431,7 +443,7 @@ option WDecay.customGrassPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 0,
+	default = 20,
 	page = WDecay_Nature,
 	translation = WDecay_customGrassPercentage,
 }
@@ -441,29 +453,109 @@ option WDecay.customGrassPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 0,
+	default = 15,
 	page = WDecay_Nature,
 	translation = WDecay_customGrassPercentageOnRoad,
 }
 
-option WDecay.dryGrassPercentage
+option WDecay.indoorOverlayCustomGrassPercentage
 {
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 0,
+	default = 35,
 	page = WDecay_Nature,
-	translation = WDecay_dryGrassPercentage,
+	translation = WDecay_indoorOverlayCustomGrassPercentage,
 }
 
-option WDecay.dryGrassPercentageOnRoad
+option WDecay.roofOverlayCustomGrassPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 35,
+	page = WDecay_Nature,
+	translation = WDecay_roofOverlayCustomGrassPercentage,
+}
+
+option WDecay.grassPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 35,
+	page = WDecay_Nature,
+	translation = WDecay_grassPercentage,
+}
+
+option WDecay.grassPercentageOnRoad
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 30,
+	page = WDecay_Nature,
+	translation = WDecay_grassPercentageOnRoad,
+}
+
+option WDecay.indoorOverlayGrassPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 55,
+	page = WDecay_Nature,
+	translation = WDecay_indoorOverlayGrassPercentage,
+}
+
+option WDecay.roofOverlayGrassPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 55,
+	page = WDecay_Nature,
+	translation = WDecay_roofOverlayGrassPercentage,
+}
+
+option WDecay.groundDebrisPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 15,
+	page = WDecay_Nature,
+	translation = WDecay_groundDebrisPercentage,
+}
+
+option WDecay.groundDebrisPercentageOnRoad
 {
 	type = integer,
 	min = 0,
 	max = 100,
 	default = 10,
 	page = WDecay_Nature,
-	translation = WDecay_dryGrassPercentageOnRoad,
+	translation = WDecay_groundDebrisPercentageOnRoad,
+}
+
+option WDecay.indoorOverlayDebrisPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 30,
+	page = WDecay_Nature,
+	translation = WDecay_indoorOverlayDebrisPercentage,
+}
+
+option WDecay.roofOverlayDebrisPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 30,
+	page = WDecay_Nature,
+	translation = WDecay_roofOverlayDebrisPercentage,
 }
 
 option WDecay.floorLeavesPercentage
@@ -481,75 +573,69 @@ option WDecay.floorLeavesPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 20,
+	default = 15,
 	page = WDecay_Nature,
 	translation = WDecay_floorLeavesPercentageOnRoad,
 }
 
-option WDecay.groundDebrisPercentage
+option WDecay.indoorOverlayLeavesPercentage
 {
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 0,
+	default = 35,
 	page = WDecay_Nature,
-	translation = WDecay_groundDebrisPercentage,
+	translation = WDecay_indoorOverlayLeavesPercentage,
 }
 
-option WDecay.groundDebrisPercentageOnRoad
+option WDecay.roofOverlayLeavesPercentage
 {
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 5,
+	default = 35,
 	page = WDecay_Nature,
-	translation = WDecay_groundDebrisPercentageOnRoad,
+	translation = WDecay_roofOverlayLeavesPercentage,
 }
 
-option Text.WDecay_Divider_Nature_GrassObjects
-{
-	type = boolean,
-	default = true,
-	page = WDecay_Nature,
-	translation = WDecay_Divider_Nature_GrassObjects,
-}
-
-option WDecay.outdoorGrassPercentage
+option WDecay.trashPercentage
 {
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 0,
+	default = 10,
 	page = WDecay_Nature,
-	translation = WDecay_outdoorGrassPercentage,
+	translation = WDecay_trashPercentage,
 }
 
-option WDecay.outdoorGrassPercentageOnRoad
+option WDecay.trashPercentageOnRoad
 {
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 40,
+	default = 10,
 	page = WDecay_Nature,
-	translation = WDecay_outdoorGrassPercentageOnRoad,
+	translation = WDecay_trashPercentageOnRoad,
 }
 
-option WDecay.indoorGrassPercentage
+option WDecay.indoorOverlayTrashPercentage
 {
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 60,
+	default = 30,
 	page = WDecay_Nature,
-	translation = WDecay_indoorGrassPercentage,
+	translation = WDecay_indoorOverlayTrashPercentage,
 }
 
-option Text.WDecay_Divider_Nature_Vines
+option WDecay.roofOverlayTrashPercentage
 {
-	type = boolean,
-	default = true,
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 25,
 	page = WDecay_Nature,
-	translation = WDecay_Divider_Nature_Vines,
+	translation = WDecay_roofOverlayTrashPercentage,
 }
 
 option WDecay.vinePercentage
@@ -557,7 +643,7 @@ option WDecay.vinePercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 70,
+	default = 50,
 	page = WDecay_Nature,
 	translation = WDecay_vinePercentage,
 }
@@ -578,14 +664,6 @@ option WDecay.vinesExteriorOnly
 	translation = WDecay_vinesExteriorOnly,
 }
 
-option WDecay.vinesOnWalls
-{
-	type = boolean,
-	default = true,
-	page = WDecay_Nature,
-	translation = WDecay_vinesOnWalls,
-}
-
 option WDecay.vinesOnFences
 {
 	type = boolean,
@@ -594,60 +672,60 @@ option WDecay.vinesOnFences
 	translation = WDecay_vinesOnFences,
 }
 
-option Text.WDecay_Divider_Nature_Trash
+option WDecay.vinesOnWalls
 {
 	type = boolean,
 	default = true,
 	page = WDecay_Nature,
-	translation = WDecay_Divider_Nature_Trash,
+	translation = WDecay_vinesOnWalls,
 }
 
-option WDecay.trashPercentage
-{
-	type = integer,
-	min = 0,
-	max = 100,
-	default = 0,
-	page = WDecay_Nature,
-	translation = WDecay_trashPercentage,
-}
-
-option WDecay.trashPercentageOnRoad
-{
-	type = integer,
-	min = 0,
-	max = 100,
-	default = 8,
-	page = WDecay_Nature,
-	translation = WDecay_trashPercentageOnRoad,
-}
-
-option Text.WDecay_Divider_Urban_Cracks
+option Text.WDecay_Divider_Nature_Objects
 {
 	type = boolean,
 	default = true,
-	page = WDecay_UrbanDecay,
-	translation = WDecay_Divider_Urban_Cracks,
+	page = WDecay_Nature,
+	translation = WDecay_Divider_Nature_Objects,
 }
 
-option WDecay.roadCrackOverlayPercentage
+option WDecay.outdoorGrassPercentage
 {
 	type = integer,
 	min = 0,
 	max = 100,
 	default = 5,
-	page = WDecay_UrbanDecay,
-	translation = WDecay_roadCrackOverlayPercentage,
+	page = WDecay_Nature,
+	translation = WDecay_outdoorGrassPercentage,
 }
 
-option WDecay.dirtCrackOverlayPercentage
+option WDecay.outdoorGrassPercentageOnRoad
 {
 	type = integer,
 	min = 0,
 	max = 100,
 	default = 10,
-	page = WDecay_UrbanDecay,
-	translation = WDecay_dirtCrackOverlayPercentage,
+	page = WDecay_Nature,
+	translation = WDecay_outdoorGrassPercentageOnRoad,
+}
+
+option WDecay.indoorGrassPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 10,
+	page = WDecay_Nature,
+	translation = WDecay_indoorGrassPercentage,
+}
+
+option WDecay.roofGrassPercentage
+{
+	type = integer,
+	min = 0,
+	max = 100,
+	default = 10,
+	page = WDecay_Nature,
+	translation = WDecay_roofGrassPercentage,
 }
 
 option Text.WDecay_Divider_Urban_Walls
@@ -656,6 +734,26 @@ option Text.WDecay_Divider_Urban_Walls
 	default = true,
 	page = WDecay_UrbanDecay,
 	translation = WDecay_Divider_Urban_Walls,
+}
+
+option WDecay.woodBarricadeMultiplier
+{
+	type = integer,
+	min = 0,
+	max = 200,
+	default = 100,
+	page = WDecay_UrbanDecay,
+	translation = WDecay_woodBarricadeMultiplier,
+}
+
+option WDecay.metalBarricadeMultiplier
+{
+	type = integer,
+	min = 0,
+	max = 200,
+	default = 100,
+	page = WDecay_UrbanDecay,
+	translation = WDecay_metalBarricadeMultiplier,
 }
 
 option WDecay.wallPercentage
@@ -779,26 +877,6 @@ option WDecay.roofPercentage
 	default = 50,
 	page = WDecay_UrbanDecay,
 	translation = WDecay_roofPercentage,
-}
-
-option WDecay.roofGrassPercentage
-{
-	type = integer,
-	min = 0,
-	max = 100,
-	default = 70,
-	page = WDecay_UrbanDecay,
-	translation = WDecay_roofGrassPercentage,
-}
-
-option WDecay.roofCustomGrassPercentage
-{
-	type = integer,
-	min = 0,
-	max = 100,
-	default = 40,
-	page = WDecay_UrbanDecay,
-	translation = WDecay_roofCustomGrassPercentage,
 }
 
 option WDecay.vehicleDecayEnabled
