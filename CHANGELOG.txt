@@ -1,3 +1,8 @@
+[h1]2.1.4[/h1]
+[list]
+[*]Renamed sandbox pages to use the full World Decay name and moved divider options into the WDecay namespace.
+[/list]
+
 [h1]2.1.3[/h1]
 [list]
 [*]Completed sandbox tooltip and barricade material-weight translations.

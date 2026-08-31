@@ -10,7 +10,7 @@ option WDecay.timeBudgetMs
 	translation = WDecay_timeBudgetMs,
 }
 
-option Text.WDecay_Divider_TS_Base
+option WDecay.dividerTSBase
 {
 	type = boolean,
 	default = true,
@@ -75,7 +75,7 @@ option WDecay.progressiveStartPercent
 	translation = WDecay_progressiveStartPercent,
 }
 
-option Text.WDecay_Divider_TS_Curve
+option WDecay.dividerTSCurve
 {
 	type = boolean,
 	default = true,
@@ -100,7 +100,7 @@ option WDecay.timeScalingFollowErosion
 	translation = WDecay_timeScalingFollowErosion,
 }
 
-option Text.WDecay_Divider_TS_Categories
+option WDecay.dividerTSCategories
 {
 	type = boolean,
 	default = true,
@@ -138,7 +138,7 @@ option WDecay.timeScalingVehiclesFactor
 	translation = WDecay_timeScalingVehiclesFactor,
 }
 
-option Text.WDecay_Divider_TS_Redecay
+option WDecay.dividerTSRedecay
 {
 	type = boolean,
 	default = true,
@@ -164,7 +164,7 @@ option WDecay.redecayThresholdDays
 	translation = WDecay_redecayThresholdDays,
 }
 
-option Text.WDecay_Divider_TS_Severity
+option WDecay.dividerTSSeverity
 {
 	type = boolean,
 	default = true,
@@ -180,7 +180,7 @@ option WDecay.severityScalingEnabled
 	translation = WDecay_severityScalingEnabled,
 }
 
-option Text.WDecay_Divider_TS_Seasons
+option WDecay.dividerTSSeasons
 {
 	type = boolean,
 	default = true,
@@ -234,7 +234,7 @@ option WDecay.debugMode
 	translation = WDecay_debugMode,
 }
 
-option Text.WDecay_Divider_Nature_Trees
+option WDecay.dividerNatureTrees
 {
 	type = boolean,
 	default = true,
@@ -342,7 +342,7 @@ option WDecay.treeVirginiapinePercentage
 	translation = WDecay_treeVirginiapinePercentage,
 }
 
-option Text.WDecay_Divider_Nature_Bushes
+option WDecay.dividerNatureBushes
 {
 	type = boolean,
 	default = true,
@@ -390,7 +390,7 @@ option WDecay.bushesPercentageOnRoof
 	translation = WDecay_bushesPercentageOnRoof,
 }
 
-option Text.WDecay_Divider_Nature_Overlays
+option WDecay.dividerNatureOverlays
 {
 	type = boolean,
 	default = true,
@@ -680,7 +680,7 @@ option WDecay.vinesOnWalls
 	translation = WDecay_vinesOnWalls,
 }
 
-option Text.WDecay_Divider_Nature_Objects
+option WDecay.dividerNatureObjects
 {
 	type = boolean,
 	default = true,
@@ -728,7 +728,7 @@ option WDecay.roofGrassPercentage
 	translation = WDecay_roofGrassPercentage,
 }
 
-option Text.WDecay_Divider_Urban_Walls
+option WDecay.dividerUrbanWalls
 {
 	type = boolean,
 	default = true,
@@ -776,7 +776,7 @@ option WDecay.barricadePercentage
 	translation = WDecay_barricadePercentage,
 }
 
-option Text.WDecay_Divider_Urban_Doors
+option WDecay.dividerUrbanDoors
 {
 	type = boolean,
 	default = true,
@@ -804,7 +804,7 @@ option WDecay.destroyedWindowsPercentage
 	translation = WDecay_destroyedWindowsPercentage,
 }
 
-option Text.WDecay_Divider_Urban_Fences
+option WDecay.dividerUrbanFences
 {
 	type = boolean,
 	default = true,
@@ -861,7 +861,7 @@ option WDecay.fenceBendSeverity
 	translation = WDecay_fenceBendSeverity,
 }
 
-option Text.WDecay_Divider_Urban_Roofs
+option WDecay.dividerUrbanRoofs
 {
 	type = boolean,
 	default = true,
@@ -947,7 +947,7 @@ option WDecay.vehicleBloodMax
 	translation = WDecay_vehicleBloodMax,
 }
 
-option Text.WDecay_Divider_Engine
+option WDecay.dividerEngine
 {
 	type = boolean,
 	default = true,
@@ -985,7 +985,7 @@ option WDecay.engineConditionMax
 	translation = WDecay_engineConditionMax,
 }
 
-option Text.WDecay_Divider_FuelElectrical
+option WDecay.dividerFuelElectrical
 {
 	type = boolean,
 	default = true,
@@ -1093,7 +1093,7 @@ option WDecay.gasTankConditionMax
 	translation = WDecay_gasTankConditionMax,
 }
 
-option Text.WDecay_Divider_RunningGear
+option WDecay.dividerRunningGear
 {
 	type = boolean,
 	default = true,
@@ -1221,7 +1221,7 @@ option WDecay.suspensionConditionMax
 	translation = WDecay_suspensionConditionMax,
 }
 
-option Text.WDecay_Divider_Exhaust
+option WDecay.dividerExhaust
 {
 	type = boolean,
 	default = true,
@@ -1269,7 +1269,7 @@ option WDecay.mufflerConditionMax
 	translation = WDecay_mufflerConditionMax,
 }
 
-option Text.WDecay_Divider_BodyPanels
+option WDecay.dividerBodyPanels
 {
 	type = boolean,
 	default = true,
@@ -1397,7 +1397,7 @@ option WDecay.trunkConditionMax
 	translation = WDecay_trunkConditionMax,
 }
 
-option Text.WDecay_Divider_GlassLighting
+option WDecay.dividerGlassLighting
 {
 	type = boolean,
 	default = true,
@@ -1525,7 +1525,7 @@ option WDecay.taillightConditionMax
 	translation = WDecay_taillightConditionMax,
 }
 
-option Text.WDecay_Divider_Interior
+option WDecay.dividerInterior
 {
 	type = boolean,
 	default = true,
