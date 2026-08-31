@@ -94,7 +94,7 @@ local cachedRoofBase = nil
 function WDecay_Grass.getBasePercentageOnRoof()
     if cachedRoofBase == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.roofGrassPercentage')
-        cachedRoofBase = opt and opt:getValue() or 10
+        cachedRoofBase = opt and opt:getValue() or 0
     end
 
     return cachedRoofBase

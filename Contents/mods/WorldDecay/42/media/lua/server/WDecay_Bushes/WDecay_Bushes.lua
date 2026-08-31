@@ -148,7 +148,7 @@ local cachedBaseIndoor = nil
 function WDecay_Bushes.getBasePercentage()
     if cachedBase == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.bushesPercentage')
-        cachedBase = opt and opt:getValue() or 25
+        cachedBase = opt and opt:getValue() or 15
     end
 
     return cachedBase
@@ -166,7 +166,7 @@ end
 function WDecay_Bushes.getIndoorBasePercentage()
     if cachedBaseIndoor == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.indoorBushesPercentage')
-        cachedBaseIndoor = opt and opt:getValue() or 10
+        cachedBaseIndoor = opt and opt:getValue() or 5
     end
 
     return cachedBaseIndoor

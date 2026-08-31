@@ -44,12 +44,12 @@ local lazyOverlayConfigs = {
     roof = {
         registered = roofOverlayRegistered,
         percentages = {
-            { key = 'roofOverlayGrassPercentage', default = 55, sprites = Sprites.vanilla },
-            { key = 'roofOverlayCustomGrassPercentage', default = 35, sprites = Sprites.custom },
-            { key = 'roofOverlayCrackPercentage', default = 25, sprites = Sprites.crack },
-            { key = 'roofOverlayLeavesPercentage', default = 35, sprites = Sprites.leaves },
-            { key = 'roofOverlayDebrisPercentage', default = 30, sprites = Sprites.debris },
-            { key = 'roofOverlayTrashPercentage', default = 25, sprites = Sprites.trash },
+            { key = 'roofOverlayGrassPercentage', default = 50, sprites = Sprites.vanilla },
+            { key = 'roofOverlayCustomGrassPercentage', default = 30, sprites = Sprites.custom },
+            { key = 'roofOverlayCrackPercentage', default = 15, sprites = Sprites.crack },
+            { key = 'roofOverlayLeavesPercentage', default = 30, sprites = Sprites.leaves },
+            { key = 'roofOverlayDebrisPercentage', default = 25, sprites = Sprites.debris },
+            { key = 'roofOverlayTrashPercentage', default = 20, sprites = Sprites.trash },
         }
     },
 }
@@ -89,16 +89,16 @@ local function registerTileOverlays()
     clearLazyOverlayCache()
 
     local gNat = seasonAdj(sb('grassPercentage', 35), 'grass')
-    local gRoad = seasonAdj(sb('grassPercentageOnRoad', 30), 'grass')
+    local gRoad = seasonAdj(sb('grassPercentageOnRoad', 35), 'grass')
     local cNat = sb('customGrassPercentage', 20)
-    local cRoad = sb('customGrassPercentageOnRoad', 15)
+    local cRoad = sb('customGrassPercentageOnRoad', 20)
     local lNat = seasonAdj(sb('floorLeavesPercentage', 20), 'leaves')
-    local lRoad = seasonAdj(sb('floorLeavesPercentageOnRoad', 15), 'leaves')
+    local lRoad = seasonAdj(sb('floorLeavesPercentageOnRoad', 20), 'leaves')
     local bNat = sb('groundDebrisPercentage', 15)
-    local bRoad = sb('groundDebrisPercentageOnRoad', 10)
+    local bRoad = sb('groundDebrisPercentageOnRoad', 15)
     local trashNat = sb('trashPercentage', 10)
-    local trashRoad = sb('trashPercentageOnRoad', 10)
-    local crackNat = sb('dirtCrackOverlayPercentage', 10)
+    local trashRoad = sb('trashPercentageOnRoad', 15)
+    local crackNat = sb('dirtCrackOverlayPercentage', 0)
     local crackRoad = sb('roadCrackOverlayPercentage', 10)
 
     local registry = {}

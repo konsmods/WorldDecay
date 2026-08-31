@@ -16,7 +16,7 @@ local PROP_ATTACHED_N = IsoPropertyType.lookup("attachedN"); local PROP_ATTACHED
 local SPRITE_FENCE = "fence"; local SPRITE_FENCING = "fencing_"
 local randomizer = WDecay_Random.get()
 local TIME_KEY = "WDecay_Vines-LoadGridsquare"
-local cvp=nil; local function getVP() if cvp==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinePercentage'); cvp=o and o:getValue() or 50 end; return cvp end
+local cvp=nil; local function getVP() if cvp==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinePercentage'); cvp=o and o:getValue() or 25 end; return cvp end
 local cmfv=nil; local function getMFV() if cmfv~=nil then return cmfv end; local o=getSandboxOptions():getOptionByName('WDecay.multiFloorVines'); if not o then return true end; cmfv=o:getValue(); return cmfv end
 local cveo=nil; local function isVEO() if cveo==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinesExteriorOnly'); cveo=o and o:getValue(); if cveo==nil then cveo=true end end; return cveo end
 local cvow=nil; local function isVOW() if cvow==nil then local o=getSandboxOptions():getOptionByName('WDecay.vinesOnWalls'); cvow=o and o:getValue(); if cvow==nil then cvow=true end end; return cvow end

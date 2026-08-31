@@ -3,6 +3,7 @@
 [*]Standardized overlay density calibration and expanded Indoor/Roof overlay controls.
 [*]Reduced default grass object density and added wooden/metal barricade weights.
 [*]Removed blank overlay sprites and reduced default vine density.
+[*]Rebalanced bush, grass-object, crack, road-overlay, and roof-overlay defaults.
 [/list]
 
 [h1]2.1.1[/h1]

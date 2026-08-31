@@ -355,7 +355,7 @@ option WDecay.bushesPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 25,
+	default = 15,
 	page = WDecay_Nature,
 	translation = WDecay_bushesPercentage,
 }
@@ -375,7 +375,7 @@ option WDecay.indoorBushesPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 10,
+	default = 5,
 	page = WDecay_Nature,
 	translation = WDecay_indoorBushesPercentage,
 }
@@ -403,7 +403,7 @@ option WDecay.dirtCrackOverlayPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 10,
+	default = 0,
 	page = WDecay_Nature,
 	translation = WDecay_dirtCrackOverlayPercentage,
 }
@@ -413,7 +413,7 @@ option WDecay.roadCrackOverlayPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 5,
+	default = 10,
 	page = WDecay_Nature,
 	translation = WDecay_roadCrackOverlayPercentage,
 }
@@ -433,7 +433,7 @@ option WDecay.roofOverlayCrackPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 20,
+	default = 15,
 	page = WDecay_Nature,
 	translation = WDecay_roofOverlayCrackPercentage,
 }
@@ -453,7 +453,7 @@ option WDecay.customGrassPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 15,
+	default = 20,
 	page = WDecay_Nature,
 	translation = WDecay_customGrassPercentageOnRoad,
 }
@@ -473,7 +473,7 @@ option WDecay.roofOverlayCustomGrassPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 35,
+	default = 30,
 	page = WDecay_Nature,
 	translation = WDecay_roofOverlayCustomGrassPercentage,
 }
@@ -493,7 +493,7 @@ option WDecay.grassPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 30,
+	default = 35,
 	page = WDecay_Nature,
 	translation = WDecay_grassPercentageOnRoad,
 }
@@ -513,7 +513,7 @@ option WDecay.roofOverlayGrassPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 55,
+	default = 50,
 	page = WDecay_Nature,
 	translation = WDecay_roofOverlayGrassPercentage,
 }
@@ -533,7 +533,7 @@ option WDecay.groundDebrisPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 10,
+	default = 15,
 	page = WDecay_Nature,
 	translation = WDecay_groundDebrisPercentageOnRoad,
 }
@@ -553,7 +553,7 @@ option WDecay.roofOverlayDebrisPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 30,
+	default = 25,
 	page = WDecay_Nature,
 	translation = WDecay_roofOverlayDebrisPercentage,
 }
@@ -573,7 +573,7 @@ option WDecay.floorLeavesPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 15,
+	default = 20,
 	page = WDecay_Nature,
 	translation = WDecay_floorLeavesPercentageOnRoad,
 }
@@ -593,7 +593,7 @@ option WDecay.roofOverlayLeavesPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 35,
+	default = 30,
 	page = WDecay_Nature,
 	translation = WDecay_roofOverlayLeavesPercentage,
 }
@@ -613,7 +613,7 @@ option WDecay.trashPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 10,
+	default = 15,
 	page = WDecay_Nature,
 	translation = WDecay_trashPercentageOnRoad,
 }
@@ -633,7 +633,7 @@ option WDecay.roofOverlayTrashPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 25,
+	default = 20,
 	page = WDecay_Nature,
 	translation = WDecay_roofOverlayTrashPercentage,
 }
@@ -643,7 +643,7 @@ option WDecay.vinePercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 50,
+	default = 25,
 	page = WDecay_Nature,
 	translation = WDecay_vinePercentage,
 }
@@ -723,7 +723,7 @@ option WDecay.roofGrassPercentage
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 10,
+	default = 0,
 	page = WDecay_Nature,
 	translation = WDecay_roofGrassPercentage,
 }
