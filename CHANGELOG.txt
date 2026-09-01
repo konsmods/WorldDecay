@@ -1,18 +1,12 @@
 [h1]2.1.4[/h1]
 [list]
-[*]Added a Fast Travel Speed and Fast Travel Time Budget option: while driving above that speed, the dispatcher temporarily uses a smaller per-tick time budget to reduce stutter during highway driving.
-[*]Fixed chunk priority being measured from the player's spawn point instead of their current position, so chunks near the player only got fast-tracked while still close to spawn -- everything loaded while driving further away was quietly deprioritized.
-[*]Fixed a rare crash-adjacent error in fence decay: breaking a fence could shrink the square's object list mid-loop, throwing an index-out-of-bounds error on that square.
-[*]Fixed excessive console logging when chunks fail to process (e.g. from fast chunk streaming); failures are now tallied and summarized periodically in debug mode instead of printed one line per chunk, and every failure reason now shares one consistent retry/cooldown so a stuck chunk can't be retried indefinitely.
-[*]Rebalanced defaults: lower natural and roof bush density, lower natural grass overlay density, higher road grass overlay density, higher vine overlay density.
-[*]Fixed World Decay floor overlays occasionally appearing twice. The engine now performs normal tile-load overlay placement; World Decay only repairs duplicates left by the previous manual path and registers late indoor/roof tile types safely.
-[*]Fixed fence decay chance selection: breakable fences use Fence Break Chance, bendable fences use Fence Bend Chance, and a zero override correctly falls back to Fence Percentage. Fence generation now remains enabled when any of those three settings is non-zero.
-[*]Renamed sandbox pages to use the full World Decay name and moved divider options into the WDecay namespace.
-[*]Added per-feature toggles (Trees, Bushes, Grass, Vines, Overlays, Barricades, Destroyed Doors & Windows, Walls, Fences) to the main sandbox page so a disabled feature is skipped entirely during generation instead of just being set to 0%.
-[*]Major performance pass: the mod now goes fully idle once an area is generated and stays idle, instead of continuing to do per-chunk and per-tick work indefinitely regardless of settings. Chunk-load reseasoning (Seasonal Vegetation Bias) is now properly gated by its own sandbox option -- previously it ran unconditionally on every chunk load even with the setting off. If you had it off and are curious, this is likely the largest single reduction.
-[*]Reworked the periodic chunk scan to back off automatically once an area stops producing new work, and to fully unregister its per-tick handler when no feature is enabled at all.
-[*]Fixed two silent chunk-processing failure paths that used to just drop a chunk and rely on chance to retry it: a chunk with no grid square available yet, and a chunk unloaded by the game mid-processing before its next tick could resume. Both now retry a bounded number of times, then back off from that specific chunk for a while instead of being re-attempted immediately by every scan and chunk load. Chunks stuck at the edge of the loaded area (a chunk that keeps loading and unloading) could previously fail indefinitely this way, showing up as ongoing Lua-call cost even while standing still, with no log at all until now.
-[*]First-time chunk generation keeps the redecay/reseason bookkeeping needed if World Age Redecay or Seasonal Vegetation Bias is enabled later, while feature generators themselves remain fully gated when disabled.
+[*]Added Fast Travel Speed and Time Budget options to reduce stutter while driving fast.
+[*]Fixed chunk priority tracking the player's spawn point instead of their live position.
+[*]Fixed a rare fence-generator crash and quieted console spam from failed chunk retries.
+[*]Rebalanced bush, grass overlay, and vine overlay density defaults.
+[*]Fixed floor overlays occasionally appearing twice, and fence break/bend chance selection.
+[*]Renamed sandbox pages, added per-feature toggles, and moved dividers into the WDecay namespace.
+[*]Major performance pass: the mod now goes fully idle once an area is generated, with smarter scan backoff and no more chunks stuck failing indefinitely at the edge of the loaded area.
 [/list]
 
 [h1]2.1.3[/h1]
