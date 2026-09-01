@@ -55,15 +55,22 @@ local MAX_CHUNK_FAIL_RETRIES = 5
 local chunkFailCooldownUntilMs = {}
 local CHUNK_FAIL_COOLDOWN_MS = 60000
 
-local function chunkFailedTransiently(key, reason)
+-- Tallied, not printed per-chunk -- a print() per failure was console spam
+-- during bursts. Flushed with the "Queue:" summary in OnTick.
+local failedCooldownCount = 0
+
+-- Same cooldown for every failure reason -- it's the retrying that costs
+-- OnTick time, not the specific reason, so there's no need to special-case one.
+local function chunkFailedTransiently(key, maxRetries)
+    maxRetries = maxRetries or MAX_CHUNK_FAIL_RETRIES
     local attempts = (chunkFailAttempts[key] or 0) + 1
-    if attempts <= MAX_CHUNK_FAIL_RETRIES then
+    if attempts <= maxRetries then
         chunkFailAttempts[key] = attempts
         return "pending"
     end
     chunkFailAttempts[key] = nil
     chunkFailCooldownUntilMs[key] = getTimestampMs() + CHUNK_FAIL_COOLDOWN_MS
-    print("[WDecay] Chunk " .. key .. " " .. reason .. " after " .. MAX_CHUNK_FAIL_RETRIES .. " attempts, backing off for a bit")
+    failedCooldownCount = failedCooldownCount + 1
     return false
 end
 
@@ -78,6 +85,9 @@ local function isChunkInFailCooldown(key)
 end
 
 local TIME_BUDGET_MS = 10
+local FAST_TRAVEL_SPEED_KMH = 30
+local FAST_TRAVEL_BUDGET_MS = 3
+local wasDrivingFast = false
 local SCAN_INTERVAL = 100
 local scanInterval = 100
 local scanIntervalSet = false
@@ -104,6 +114,38 @@ local function scanTrackerMoved(trackKey, worldX, worldY)
     lastScanChunkX[trackKey] = wx
     lastScanChunkY[trackKey] = wy
     return moved
+end
+
+-- Used to shrink the tick budget during fast travel, when chunk streaming is heaviest.
+local function isAnyPlayerDrivingFast(thresholdKmh)
+    local numPlayers = getNumActivePlayers and getNumActivePlayers() or 0
+    for i = 0, numPlayers - 1 do
+        local player = getSpecificPlayer(i)
+        local vehicle = player and player:getVehicle()
+        if vehicle and vehicle:getCurrentSpeedKmHour() >= thresholdKmh then return true end
+    end
+    if numPlayers == 0 then
+        local online = getOnlinePlayers()
+        if online and online.size then
+            for i = 0, online:size() - 1 do
+                local p = online:get(i)
+                local vehicle = p and p:getVehicle()
+                if vehicle and vehicle:getCurrentSpeedKmHour() >= thresholdKmh then return true end
+            end
+        end
+    end
+    return false
+end
+
+-- Live player position for queueChunk's priority check (not the frozen spawn point).
+local function currentTrackedPlayerPos()
+    local player = getSpecificPlayer and getSpecificPlayer(0)
+    if not player then
+        local online = getOnlinePlayers()
+        player = online and online.size and online:size() > 0 and online:get(0) or nil
+    end
+    if not player then return nil, nil end
+    return math.floor(player:getX()), math.floor(player:getY())
 end
 
 local spawnX = nil
@@ -151,6 +193,8 @@ local function loadDispatcherConfig()
     end
 
     TIME_BUDGET_MS = getInt('timeBudgetMs', 10)
+    FAST_TRAVEL_SPEED_KMH = getInt('fastTravelSpeedKmh', 30)
+    FAST_TRAVEL_BUDGET_MS = getInt('fastTravelBudgetMs', 3)
     SCAN_INTERVAL = getInt('scanInterval', 100)
     SCAN_RADIUS = getInt('scanRadius', 15)
     PRIORITY_RADIUS = getInt('priorityRadius', 5)
@@ -797,7 +841,7 @@ local function processChunkSquares(chunk, key, deadline)
             z = z + 1
         end
         if not markerSquare then
-            return chunkFailedTransiently(key, "still has no grid square")
+            return chunkFailedTransiently(key)
         end
         local markerData = markerSquare:getModData()
         local doneAtDays = nil
@@ -833,10 +877,10 @@ local function processChunkSquares(chunk, key, deadline)
         if chunk.wx ~= state.wx or chunk.wy ~= state.wy or not markerSquare or not markerSquare:getChunk()
             or math.floor(markerSquare:getX() / 8) ~= state.wx or math.floor(markerSquare:getY() / 8) ~= state.wy
             or markerSquare:getModData() ~= state.markerData then
-            -- Chunk got unloaded/reloaded between the last "pending" tick and
-            -- this resume attempt.
+            -- Chunk unloaded before we could resume it; only a fresh
+            -- LoadChunk can bring it back, so don't keep retrying.
             chunkWork[key] = nil
-            return chunkFailedTransiently(key, "was unloaded mid-processing (resume check failed)")
+            return chunkFailedTransiently(key, 1)
         end
         if state.mode == "carry" then
             return processChunkCarry(chunk, key, markerSquare, state.markerData, state.doneAtDays, deadline)
@@ -1013,9 +1057,10 @@ local function queueChunk(chunk)
     pendingChunks[key] = true
     local targetDist = 999999
     local cx, cy = wx * 8 + 4, wy * 8 + 4
-    if spawnX and spawnY then
-        local dx = cx - spawnX
-        local dy = cy - spawnY
+    local px, py = currentTrackedPlayerPos()
+    if px and py then
+        local dx = cx - px
+        local dy = cy - py
         targetDist = dx * dx + dy * dy
     end
 
@@ -1281,14 +1326,28 @@ function OnTick()
             local highCount = chunkQueueTailHigh - chunkQueueHeadHigh + 1
             local lowCount = chunkQueueTailLow - chunkQueueHeadLow + 1
             print("[WDecay] Queue: high=" .. highCount .. " low=" .. lowCount)
+            if failedCooldownCount > 0 then
+                print("[WDecay] Chunk failures (last 30 ticks): cooled-down=" .. failedCooldownCount)
+                failedCooldownCount = 0
+            end
         end
     end
 
+    local effectiveBudgetMs = TIME_BUDGET_MS
+    if FAST_TRAVEL_SPEED_KMH > 0 and FAST_TRAVEL_BUDGET_MS < TIME_BUDGET_MS
+        and isAnyPlayerDrivingFast(FAST_TRAVEL_SPEED_KMH) then
+        effectiveBudgetMs = FAST_TRAVEL_BUDGET_MS
+    end
+    if DEBUG_MODE and (effectiveBudgetMs < TIME_BUDGET_MS) ~= wasDrivingFast then
+        wasDrivingFast = effectiveBudgetMs < TIME_BUDGET_MS
+        print("[WDecay] Fast travel budget " .. (wasDrivingFast and "engaged" or "released"))
+    end
+
     local startMs = getTimestampMs()
-    local deadline = startMs + TIME_BUDGET_MS
+    local deadline = startMs + effectiveBudgetMs
     local highDeadline = deadline
-    if chunkQueueHeadHigh <= chunkQueueTailHigh and chunkQueueHeadLow <= chunkQueueTailLow and TIME_BUDGET_MS > 1 then
-        highDeadline = startMs + math.max(1, math.floor(TIME_BUDGET_MS * 0.7))
+    if chunkQueueHeadHigh <= chunkQueueTailHigh and chunkQueueHeadLow <= chunkQueueTailLow and effectiveBudgetMs > 1 then
+        highDeadline = startMs + math.max(1, math.floor(effectiveBudgetMs * 0.7))
     end
 
     while chunkQueueHeadHigh <= chunkQueueTailHigh and getTimestampMs() < highDeadline do

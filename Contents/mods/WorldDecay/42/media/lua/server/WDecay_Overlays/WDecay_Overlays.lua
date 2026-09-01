@@ -89,8 +89,8 @@ local function registerTileOverlays()
 
     clearLazyOverlayCache()
 
-    local gNat = seasonAdj(sb('grassPercentage', 35), 'grass')
-    local gRoad = seasonAdj(sb('grassPercentageOnRoad', 35), 'grass')
+    local gNat = seasonAdj(sb('grassPercentage', 15), 'grass')
+    local gRoad = seasonAdj(sb('grassPercentageOnRoad', 50), 'grass')
     local cNat = sb('customGrassPercentage', 20)
     local cRoad = sb('customGrassPercentageOnRoad', 20)
     local lNat = seasonAdj(sb('floorLeavesPercentage', 20), 'leaves')

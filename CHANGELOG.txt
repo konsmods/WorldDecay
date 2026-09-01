@@ -1,5 +1,10 @@
 [h1]2.1.4 - PENDING[/h1]
 [list]
+[*]Added a Fast Travel Speed and Fast Travel Time Budget option: while driving above that speed, the dispatcher temporarily uses a smaller per-tick time budget to reduce stutter during highway driving.
+[*]Fixed chunk priority being measured from the player's spawn point instead of their current position, so chunks near the player only got fast-tracked while still close to spawn -- everything loaded while driving further away was quietly deprioritized.
+[*]Fixed a rare crash-adjacent error in fence decay: breaking a fence could shrink the square's object list mid-loop, throwing an index-out-of-bounds error on that square.
+[*]Fixed excessive console logging when chunks fail to process (e.g. from fast chunk streaming); failures are now tallied and summarized periodically in debug mode instead of printed one line per chunk, and every failure reason now shares one consistent retry/cooldown so a stuck chunk can't be retried indefinitely.
+[*]Rebalanced defaults: lower natural and roof bush density, lower natural grass overlay density, higher road grass overlay density, higher vine overlay density.
 [*]Fixed World Decay floor overlays occasionally appearing twice. The engine now performs normal tile-load overlay placement; World Decay only repairs duplicates left by the previous manual path and registers late indoor/roof tile types safely.
 [*]Fixed fence decay chance selection: breakable fences use Fence Break Chance, bendable fences use Fence Bend Chance, and a zero override correctly falls back to Fence Percentage. Fence generation now remains enabled when any of those three settings is non-zero.
 [*]Renamed sandbox pages to use the full World Decay name and moved divider options into the WDecay namespace.

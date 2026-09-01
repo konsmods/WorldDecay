@@ -84,11 +84,13 @@ local function LoadGridsquare(square, checkResult, level)
     if level ~= 0 then return end
 
     local objects = checkResult.objects
-    local len = objects:size()
 
-    if not objects or len == 0 then return end
+    if not objects or objects:size() == 0 then return end
 
-    for i = 0, len - 1 do
+    -- objects is live, not a snapshot; destroyFence() below can shrink it
+    -- mid-loop, so re-check size() each iteration instead of caching it.
+    local i = 0
+    while i < objects:size() do
         local obj = objects:get(i)
 
         if obj then
@@ -131,6 +133,7 @@ local function LoadGridsquare(square, checkResult, level)
                 end
             end
         end
+        i = i + 1
     end
 end
 
