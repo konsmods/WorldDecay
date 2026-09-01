@@ -106,6 +106,8 @@ end
 if not WDecay_ModifierGenerators then WDecay_ModifierGenerators = {} end
 
 table.insert(WDecay_ModifierGenerators, LoadGridsquare)
+if not WDecay_ModifierGeneratorFeatures then WDecay_ModifierGeneratorFeatures = {} end
+WDecay_ModifierGeneratorFeatures[#WDecay_ModifierGenerators] = "barricades"
 
 function WDecay_Barricades_ApplyToSquare(square, checkResult, level)
     LoadGridsquare(square, checkResult, level)

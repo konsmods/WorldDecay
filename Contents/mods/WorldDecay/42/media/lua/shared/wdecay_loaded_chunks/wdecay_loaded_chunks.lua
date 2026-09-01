@@ -20,6 +20,8 @@
 -- around each online player instead of enumerating a server-internal list --
 -- that's the same thing that determines what actually gets/stays loaded in
 -- the first place.
+local WDecay_Season = require('wdecay_season/wdecay_season')
+
 local WDecay_LoadedChunks = {}
 
 local CHUNK_SIZE = 10
@@ -67,5 +69,62 @@ function WDecay_LoadedChunks.forEachLoadedSquare(fn)
         end
     end
 end
+
+-- Shared by the dispatcher and the four WDecay_*_Reseason.lua modules for
+-- their marker-based "does this chunk have any of our objects" checks.
+function WDecay_LoadedChunks.getMarkerSquare(chunk)
+    local square = chunk:getGridSquare(0, 0, 0)
+    if square then return square end
+
+    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
+        square = chunk:getGridSquare(0, 0, z)
+        if square then return square end
+    end
+
+    return nil
+end
+
+-- The four WDecay_*_Reseason.lua modules each want a per-square seasonal
+-- update check across every loaded square. Rather than each running its own
+-- full forEachLoadedSquare() sweep (same squares, walked four times), they
+-- register a callback here so the walk happens once for all of them.
+local reseasonCallbacks = {}
+
+function WDecay_LoadedChunks.registerReseasonCallback(fn)
+    reseasonCallbacks[#reseasonCallbacks + 1] = fn
+end
+
+local function reseasonAllLoadedChunks()
+    if #reseasonCallbacks == 0 then return 0, 0 end
+
+    local totalEvaluated, totalChanged = 0, 0
+    WDecay_LoadedChunks.forEachLoadedSquare(function(square)
+        for i = 1, #reseasonCallbacks do
+            local evaluated, changed = reseasonCallbacks[i](square)
+            totalEvaluated = totalEvaluated + evaluated
+            totalChanged = totalChanged + changed
+        end
+    end)
+    return totalEvaluated, totalChanged
+end
+
+local lastSeasonValue, lastSnow, firstCheck = nil, nil, true
+
+local function checkAndReseason()
+    if #reseasonCallbacks == 0 then return end
+
+    local seasonValue = WDecay_Season.getSeasonValue()
+    local snow = WDecay_Season.isSnowing()
+    if not firstCheck and seasonValue == lastSeasonValue and snow == lastSnow then
+        return
+    end
+
+    firstCheck = false
+    lastSeasonValue = seasonValue
+    lastSnow = snow
+    reseasonAllLoadedChunks()
+end
+
+Events.EveryTenMinutes.Add(checkAndReseason)
 
 return WDecay_LoadedChunks

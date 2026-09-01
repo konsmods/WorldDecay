@@ -138,5 +138,7 @@ end
 if not WDecay_ModifierGenerators then WDecay_ModifierGenerators = {} end
 
 table.insert(WDecay_ModifierGenerators, LoadGridsquare)
+if not WDecay_ModifierGeneratorFeatures then WDecay_ModifierGeneratorFeatures = {} end
+WDecay_ModifierGeneratorFeatures[#WDecay_ModifierGenerators] = "fences"
 
 return WDecay_Fences

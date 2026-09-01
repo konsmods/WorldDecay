@@ -97,6 +97,7 @@ end
 local pf=LoadGridsquare; local function dlg(s,cr,l) WD_Debug_Metric.startTimeMeasurement(TIME_KEY); local r=pf(s,cr,l); WD_Debug_Metric.endTimeMeasurement(TIME_KEY); return r end
 if isDebugEnabled() then LoadGridsquare=dlg end
 if not WDecay_ModifierGenerators then WDecay_ModifierGenerators={} end; table.insert(WDecay_ModifierGenerators,LoadGridsquare)
+if not WDecay_ModifierGeneratorFeatures then WDecay_ModifierGeneratorFeatures={} end; WDecay_ModifierGeneratorFeatures[#WDecay_ModifierGenerators]="vines"
 function WDecay_Vines_ApplyToSquare(square,checkResult,level)
     if not square then return end
     if checkResult and checkResult.cleaned then return end

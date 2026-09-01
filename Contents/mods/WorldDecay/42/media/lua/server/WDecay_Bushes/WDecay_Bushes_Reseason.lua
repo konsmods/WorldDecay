@@ -15,6 +15,8 @@
 
 local WDecay_Bushes = require('WDecay_Bushes/WDecay_Bushes')
 local WDecay_Season = require('wdecay_season/wdecay_season')
+local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_Features = require('wdecay_features/wdecay_features')
 local WDecay_CleanVegetation = require('wdecay_cleanvegetation/wdecay_cleanvegetation')
 local WDecay_LoadedChunks = require('wdecay_loaded_chunks/wdecay_loaded_chunks')
 
@@ -104,9 +106,20 @@ local function reseasonSquare(square)
 end
 
 -- Used both standalone (chunk-load hook) and as the per-chunk unit of the
--- full sweep below. Returns evaluated, changed counts.
+-- full sweep below. Returns evaluated, changed counts. Bails immediately if
+-- the chunk never placed a bush, rather than walking all ~512 squares to
+-- find nothing every time this chunk streams back in.
 local function reseasonChunk(chunk)
     if not chunk then return 0, 0 end
+
+    local markerSquare = WDecay_LoadedChunks.getMarkerSquare(chunk)
+    local markerData = markerSquare and markerSquare:getModData()
+    if markerData then
+        local placed = (markerData["WDecay_placedBushesNatural"] or 0)
+            + (markerData["WDecay_placedBushesRoad"] or 0)
+            + (markerData["WDecay_placedBushesIndoor"] or 0)
+        if placed <= 0 then return 0, 0 end
+    end
 
     local evaluated, changed = 0, 0
     for z = chunk:getMinLevel(), chunk:getMaxLevel() do
@@ -121,10 +134,11 @@ local function reseasonChunk(chunk)
     return evaluated, changed
 end
 
-Events.LoadChunk.Add(reseasonChunk)
-
 local warnedMissingLoadedChunks = false
 
+-- Used only by the manual debug trigger below -- the automatic sweep goes
+-- through WDecay_LoadedChunks.registerReseasonCallback instead (see
+-- registerIfEnabled), which walks every loaded square once for all modules.
 local function reseasonAllLoadedChunks()
     if not (WDecay_LoadedChunks and WDecay_LoadedChunks.forEachLoadedSquare) then
         -- require() can fail on a brand-new shared module until the game is
@@ -146,23 +160,24 @@ local function reseasonAllLoadedChunks()
     return totalEvaluated, totalChanged
 end
 
-local lastSeasonValue, lastSnow, firstCheck = nil, nil, true
+-- Only register the LoadChunk/full-sweep hooks if seasonal bias and bushes
+-- are both on -- otherwise there's nothing to reseason. Events.OnGameStart
+-- is the readiness point WDecay_Dispatcher.lua's own config load relies on.
+local registered = false
+local function registerIfEnabled()
+    if registered then return end
+    if not (WDecay_Scaling.isSeasonalBiasEnabled() and WDecay_Features.isEnabled("bushes")) then return end
 
-local function checkAndReseason()
-    local seasonValue = WDecay_Season.getSeasonValue()
-    local snow = WDecay_Season.isSnowing()
-    if not firstCheck and seasonValue == lastSeasonValue and snow == lastSnow then
-        return
-    end
-    firstCheck = false
-    lastSeasonValue = seasonValue
-    lastSnow = snow
-    reseasonAllLoadedChunks()
+    registered = true
+    Events.LoadChunk.Add(reseasonChunk)
+    WDecay_LoadedChunks.registerReseasonCallback(reseasonSquare)
 end
 
-Events.EveryTenMinutes.Add(checkAndReseason)
+Events.OnGameStart.Add(registerIfEnabled)
 
 -- Manual trigger for testing, same pattern as WD_DebugTools.reseasonNearbyTrees.
+-- Always available regardless of the toggle above, same as
+-- WD_DebugTools.generateSquare bypassing feature gating for manual testing.
 WD_DebugTools = WD_DebugTools or {}
 function WD_DebugTools.reseasonNearbyBushes()
     local evaluated, changed = reseasonAllLoadedChunks()

@@ -17,10 +17,14 @@ local isDebug = isDebugEnabled()
 
 local muteLogLookup = {}
 
-local function writeBuffer(line)
-    buffer = buffer .. "\n" .. line
-    isFlushed = false
-end
+-- This module is shared (runs on both client and server), so an always-on
+-- Events.OnTickEvenPaused handler here costs a call on both sides every
+-- tick for nothing, most of the time. Register it only while there's
+-- buffered output to flush; writeBuffer re-registers on the next log call.
+-- onTick is forward-declared since flush needs to Remove it and onTick
+-- needs to call flush -- one has to be declared before the other exists.
+local tickHandlerRegistered = false
+local onTick
 
 local function flush()
     if not isFlushed then
@@ -28,15 +32,32 @@ local function flush()
         print(buffer)
         buffer = ""
     end
+    if tickHandlerRegistered then
+        tickHandlerRegistered = false
+        Events.OnTickEvenPaused.Remove(onTick)
+    end
 end
 
-local function onTick()
+function onTick()
     if tickCounter >= TICKS_BEFORE_FLUSH then
         tickCounter = 0
-        flush() 
+        flush()
     else
         tickCounter = tickCounter + 1
     end
+end
+
+local function ensureTickHandlerRegistered()
+    if tickHandlerRegistered then return end
+    tickHandlerRegistered = true
+    tickCounter = 0
+    Events.OnTickEvenPaused.Add(onTick)
+end
+
+local function writeBuffer(line)
+    buffer = buffer .. "\n" .. line
+    isFlushed = false
+    ensureTickHandlerRegistered()
 end
 
 function WD_Logger.printInfo(message, fileName)
@@ -77,7 +98,8 @@ function WD_Logger.unmuteLog(fileName)
     muteLogLookup[fileName] = false
 end
 
-Events.OnTickEvenPaused.Add(onTick)
+-- Always flushes on save (a no-op if nothing's buffered) -- the ticker
+-- above is the only thing made conditional.
 Events.OnPostSave.Add(flush)
 
 return WD_Logger

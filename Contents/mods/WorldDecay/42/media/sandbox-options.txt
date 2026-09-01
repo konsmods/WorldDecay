@@ -226,6 +226,86 @@ option WDecay.priorityRadius
 	translation = WDecay_priorityRadius,
 }
 
+option WDecay.dividerFeatureToggles
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_Divider_Feature_Toggles,
+}
+
+option WDecay.enableTrees
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableTrees,
+}
+
+option WDecay.enableBushes
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableBushes,
+}
+
+option WDecay.enableGrass
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableGrass,
+}
+
+option WDecay.enableVines
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableVines,
+}
+
+option WDecay.enableOverlays
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableOverlays,
+}
+
+option WDecay.enableBarricades
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableBarricades,
+}
+
+option WDecay.enableDestroyedDoorsWindows
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableDestroyedDoorsWindows,
+}
+
+option WDecay.enableWalls
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableWalls,
+}
+
+option WDecay.enableFences
+{
+	type = boolean,
+	default = true,
+	page = WDecay,
+	translation = WDecay_enableFences,
+}
+
 option WDecay.debugMode
 {
 	type = boolean,

@@ -255,6 +255,11 @@ function WDecay_Scaling.isTimeScalingEnabled()
     return c ~= nil and c.enabled == true
 end
 
+function WDecay_Scaling.isSeasonalBiasEnabled()
+    local c = getConfig()
+    return c ~= nil and c.seasonalBias == true
+end
+
 function WDecay_Scaling.getRedecayThresholdDays()
     local c = getConfig()
     if not c then return 180 end

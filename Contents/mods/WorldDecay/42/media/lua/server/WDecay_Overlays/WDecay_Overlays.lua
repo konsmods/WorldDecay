@@ -5,6 +5,7 @@ local Sprites = require("WDecay_Overlays/Data/Sprites")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 local WDecay_SquareCheck = require('wdecay_squarecheck/wdecay_squarecheck')
+local WDecay_Features = require('wdecay_features/wdecay_features')
 
 local randomizer = WDecay_Random.get()
 
@@ -85,6 +86,7 @@ end
 
 local function registerTileOverlays()
     if TILEZED then return end
+    if not WDecay_Features.isEnabled("overlays") then return end
 
     clearLazyOverlayCache()
 
@@ -223,6 +225,7 @@ end
 
 function WDecay_Overlays_ApplyToChunk(chunk)
     if TILEZED then return end
+    if not WDecay_Features.isEnabled("overlays") then return end
 
     local overlays = getTileOverlays()
     if not overlays then return end

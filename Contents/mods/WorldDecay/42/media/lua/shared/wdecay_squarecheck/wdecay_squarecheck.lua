@@ -159,11 +159,21 @@ function WDecay_SquareCheck.printCheckResult(checkresult)
     end
 end
 
-function WDecay_SquareCheck.checkAll(square, level)
+-- Called once per square, per chunk. WD_Debug_Metric's start/end calls are
+-- no-ops in release already, but still cost two calls per square for
+-- nothing -- same pattern as the generator files: bind the plain function
+-- directly, only swap in the measured wrapper under isDebugEnabled().
+WDecay_SquareCheck.checkAll = fastCheckPlacement
+
+local function debugCheckAll(square, level)
     WD_Debug_Metric.startTimeMeasurement(TIME_KEY)
     local checkResult = fastCheckPlacement(square, level)
     WD_Debug_Metric.endTimeMeasurement(TIME_KEY)
     return checkResult
+end
+
+if isDebugEnabled() then
+    WDecay_SquareCheck.checkAll = debugCheckAll
 end
 
 return WDecay_SquareCheck

@@ -8,8 +8,20 @@ local WDecay_Placement = require('wdecay_placement/wdecay_placement')
 local WDecay_Trees = require('WDecay_Trees/WDecay_Trees')
 local WDecay_Bushes = require('WDecay_Bushes/WDecay_Bushes')
 local WDecay_Grass = require('WDecay_Grass/WDecay_Grass')
+local WDecay_Features = require('wdecay_features/wdecay_features')
 
+-- Stamped onto each chunk's own WDecay_done marker. Do NOT bump this for
+-- internal cache-format changes (see SCAN_CACHE_VERSION) -- it forces every
+-- already-generated chunk in every existing save to be reprocessed. Only
+-- bump it when what "done" means for a chunk actually changes.
 local CACHE_VERSION = 4
+
+-- Versions the persisted "which chunks have we already seen" scan cache
+-- (WDecay_ChunkCache) independently of CACHE_VERSION -- wiping this just
+-- costs one extra cheap isChunkMarkedDone lookup per chunk, not a
+-- reprocess. Bumped when GenerateKey's key format changes.
+local SCAN_CACHE_VERSION = 1
+
 local DEBUG_MODE = false
 
 local seenChunks = {}
@@ -31,6 +43,40 @@ local PRIORITY_RADIUS = 5
 local pendingChunks = {}
 local chunkWork = {}
 
+-- A chunk can fail for reasons that are purely about timing (grid squares
+-- not populated yet, or unloaded between a "pending" tick and its resume).
+-- Retry a bounded number of times, then cool down instead of being
+-- immediately re-queued by the next LoadChunk/scan -- confirmed by testing
+-- that without this, a small number of chunks can fail indefinitely,
+-- forever resetting the scan-interval backoff. chunkSucceeded() clears both
+-- so a chunk that does process cleanly doesn't carry this history forward.
+local chunkFailAttempts = {}
+local MAX_CHUNK_FAIL_RETRIES = 5
+local chunkFailCooldownUntilMs = {}
+local CHUNK_FAIL_COOLDOWN_MS = 60000
+
+local function chunkFailedTransiently(key, reason)
+    local attempts = (chunkFailAttempts[key] or 0) + 1
+    if attempts <= MAX_CHUNK_FAIL_RETRIES then
+        chunkFailAttempts[key] = attempts
+        return "pending"
+    end
+    chunkFailAttempts[key] = nil
+    chunkFailCooldownUntilMs[key] = getTimestampMs() + CHUNK_FAIL_COOLDOWN_MS
+    print("[WDecay] Chunk " .. key .. " " .. reason .. " after " .. MAX_CHUNK_FAIL_RETRIES .. " attempts, backing off for a bit")
+    return false
+end
+
+local function chunkSucceeded(key)
+    chunkFailAttempts[key] = nil
+    chunkFailCooldownUntilMs[key] = nil
+end
+
+local function isChunkInFailCooldown(key)
+    local untilMs = chunkFailCooldownUntilMs[key]
+    return untilMs ~= nil and getTimestampMs() < untilMs
+end
+
 local TIME_BUDGET_MS = 10
 local SCAN_INTERVAL = 100
 local scanInterval = 100
@@ -39,6 +85,27 @@ local SCAN_RADIUS = 15
 local scanTimer = 0
 local debugTickCounter = 0
 
+-- LoadChunk already queues every chunk as it streams in -- this periodic
+-- scan is just a safety net for chunks that loaded before the mod
+-- initialized. Back the effective interval off exponentially whenever a
+-- cycle queues nothing and no tracked player changed chunks; snap back to
+-- base the moment either happens again.
+local SCAN_BACKOFF_MAX_MULTIPLIER = 30
+local scanBackoffMultiplier = 1
+local lastScanChunkX = {}
+local lastScanChunkY = {}
+
+-- Returns true if this is the first time trackKey has been seen, or if it
+-- moved to a different chunk since the last time this was called for it.
+local function scanTrackerMoved(trackKey, worldX, worldY)
+    local wx = math.floor(worldX / 8)
+    local wy = math.floor(worldY / 8)
+    local moved = lastScanChunkX[trackKey] ~= wx or lastScanChunkY[trackKey] ~= wy
+    lastScanChunkX[trackKey] = wx
+    lastScanChunkY[trackKey] = wy
+    return moved
+end
+
 local spawnX = nil
 local spawnY = nil
 local spawnAttempts = 0
@@ -46,6 +113,28 @@ local MAX_SPAWN_ATTEMPTS = 5
 
 local SEEN_CHUNKS_MAX = 20000
 local seenChunksCount = 0
+
+-- Filtered, index-aligned views of WDecay_PlacementGenerators/
+-- WDecay_ModifierGenerators (see buildActiveGeneratorLists) with only the
+-- currently-enabled generators. Forward-declared for loadDispatcherConfig.
+local activePlacementGenerators = nil
+local activePlacementIndices = nil
+local activeModifierGenerators = nil
+local activeModifierIndices = nil
+local buildActiveGeneratorLists
+
+-- OnTick unregisters itself when nothing is active (see loadDispatcherConfig)
+-- so an idle mod costs zero per-tick calls. queueChunk/
+-- WDecay_Dispatcher_QueueArea re-register it if they ever queue a chunk
+-- while it's off.
+local onTickRegistered = true
+local OnTick
+
+local function ensureOnTickRegistered()
+    if onTickRegistered then return end
+    onTickRegistered = true
+    Events.OnTick.Add(OnTick)
+end
 
 local dispatcherConfigLoaded = false
 local function loadDispatcherConfig()
@@ -66,7 +155,18 @@ local function loadDispatcherConfig()
     SCAN_RADIUS = getInt('scanRadius', 15)
     PRIORITY_RADIUS = getInt('priorityRadius', 5)
     DEBUG_MODE = getBool('debugMode', false)
+    buildActiveGeneratorLists()
     dispatcherConfigLoaded = true
+
+    -- Nothing active to generate, reseason, or overlay at all. Safe to
+    -- Remove from inside OnTick's own first invocation -- only affects
+    -- future ticks.
+    if onTickRegistered and #activePlacementGenerators == 0 and #activeModifierGenerators == 0
+        and not WDecay_Features.isEnabled("overlays") and not WDecay_Scaling.isSeasonalBiasEnabled() then
+        onTickRegistered = false
+        Events.OnTick.Remove(OnTick)
+    end
+
     if DEBUG_MODE then
         WDecay_Scaling.printStatus()
     end
@@ -74,8 +174,14 @@ end
 
 local perfTickCounter = 0
 
+-- Numeric key instead of a "wx:wy" string -- avoids a string alloc per
+-- chunk on every scan cycle. wx/wy never come close to +/-2,000,000 on any
+-- real map, keeping the packed key well inside 2^53 (max ~1.6e13).
+local KEY_OFFSET = 2000000
+local KEY_MULT = 4000001 -- > 2*KEY_OFFSET+1, so adjacent wx bands never overlap
+
 local function GenerateKey(wx, wy)
-    return wx .. ":" .. wy
+    return (wx + KEY_OFFSET) * KEY_MULT + (wy + KEY_OFFSET)
 end
 
 local function markSeen(key)
@@ -102,31 +208,96 @@ local function runGenerator(fn, square, checkResult, level, category, index)
     return true, result == true
 end
 
-local function dispatchGenerators(square, checkResult, level)
-    local allSucceeded = true
+-- Each *GeneratorFeatures[i] (set alongside WDecay_*Generators[i] at
+-- registration) names the feature gating that generator. Filters to just
+-- the enabled ones so dispatchGenerators never calls a disabled generator
+-- at all. Original indices are kept alongside so error messages and
+-- WDecay_DebugCount*, which are indexed against the unfiltered arrays,
+-- still line up.
+function buildActiveGeneratorLists()
+    activePlacementGenerators = {}
+    activePlacementIndices = {}
     if WDecay_PlacementGenerators then
         for i = 1, #WDecay_PlacementGenerators do
             local fn = WDecay_PlacementGenerators[i]
-            if fn then
-                local ok, placed = runGenerator(fn, square, checkResult, level, "placement", i)
-                if not ok then allSucceeded = false end
-                if placed then
-                    if WDecay_DebugCountPlacement then WDecay_DebugCountPlacement(i) end
-                    break
-                end
+            local feature = WDecay_PlacementGeneratorFeatures and WDecay_PlacementGeneratorFeatures[i]
+            if fn and (not feature or WDecay_Features.isEnabled(feature)) then
+                local n = #activePlacementGenerators + 1
+                activePlacementGenerators[n] = fn
+                activePlacementIndices[n] = i
             end
         end
     end
+    activeModifierGenerators = {}
+    activeModifierIndices = {}
     if WDecay_ModifierGenerators then
         for i = 1, #WDecay_ModifierGenerators do
             local fn = WDecay_ModifierGenerators[i]
-            if fn then
-                local ok = runGenerator(fn, square, checkResult, level, "modifier", i)
-                if not ok then allSucceeded = false end
+            local feature = WDecay_ModifierGeneratorFeatures and WDecay_ModifierGeneratorFeatures[i]
+            if fn and (not feature or WDecay_Features.isEnabled(feature)) then
+                local n = #activeModifierGenerators + 1
+                activeModifierGenerators[n] = fn
+                activeModifierIndices[n] = i
             end
         end
     end
+end
+
+-- Debug path: one pcall per generator per square, same as before, so an
+-- error is attributed to the exact generator/square/index that threw it.
+local function dispatchGeneratorsChecked(square, checkResult, level)
+    local allSucceeded = true
+    if activePlacementGenerators then
+        for n = 1, #activePlacementGenerators do
+            local fn = activePlacementGenerators[n]
+            local origIndex = activePlacementIndices[n]
+            local ok, placed = runGenerator(fn, square, checkResult, level, "placement", origIndex)
+            if not ok then allSucceeded = false end
+            if placed then
+                if WDecay_DebugCountPlacement then WDecay_DebugCountPlacement(origIndex) end
+                break
+            end
+        end
+    end
+    if activeModifierGenerators then
+        for n = 1, #activeModifierGenerators do
+            local fn = activeModifierGenerators[n]
+            local origIndex = activeModifierIndices[n]
+            local ok = runGenerator(fn, square, checkResult, level, "modifier", origIndex)
+            if not ok then allSucceeded = false end
+        end
+    end
     return allSucceeded
+end
+
+-- Release path: no per-generator pcall. runQueuedChunk's own pcall around
+-- the whole chunk still catches a throw -- it just aborts the rest of that
+-- chunk for this tick instead of being logged generator-by-generator, and
+-- the chunk gets reprocessed next time it's queued either way. debugMode
+-- trades this back for precise per-generator error attribution.
+local function dispatchGeneratorsFast(square, checkResult, level)
+    if activePlacementGenerators then
+        for n = 1, #activePlacementGenerators do
+            local fn = activePlacementGenerators[n]
+            if fn(square, checkResult, level) then
+                if WDecay_DebugCountPlacement then WDecay_DebugCountPlacement(activePlacementIndices[n]) end
+                break
+            end
+        end
+    end
+    if activeModifierGenerators then
+        for n = 1, #activeModifierGenerators do
+            activeModifierGenerators[n](square, checkResult, level)
+        end
+    end
+    return true
+end
+
+local function dispatchGenerators(square, checkResult, level)
+    if DEBUG_MODE then
+        return dispatchGeneratorsChecked(square, checkResult, level)
+    end
+    return dispatchGeneratorsFast(square, checkResult, level)
 end
 
 local function snapshotObjects(square)
@@ -168,20 +339,11 @@ local function recordNewPlacements(markerData, square, checkResult, existing)
 end
 
 local WDecay_SquareCheck = require('wdecay_squarecheck/wdecay_squarecheck')
+local WDecay_LoadedChunks = require('wdecay_loaded_chunks/wdecay_loaded_chunks')
 
 local cachedSquareCheck = WDecay_SquareCheck.checkAll
 
-local function getMarkerSquare(chunk)
-    local square = chunk:getGridSquare(0, 0, 0)
-    if square then return square end
-
-    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
-        square = chunk:getGridSquare(0, 0, z)
-        if square then return square end
-    end
-
-    return nil
-end
+local getMarkerSquare = WDecay_LoadedChunks.getMarkerSquare
 
 local function isChunkMarkedDone(square)
     return square ~= nil and square:getModData()["WDecay_done"] == CACHE_VERSION
@@ -235,6 +397,7 @@ local carryCategories = {
     {
         scaleCategory = "nature",
         eligKey = "WDecay_eligTreesNatural",
+        feature = "trees",
         carryKey = "WDecay_carryTreesNatural",
         placedKey = "WDecay_placedTreesNatural",
         eligible = function(checkResult, level)
@@ -257,6 +420,7 @@ local carryCategories = {
     {
         scaleCategory = "nature",
         eligKey = "WDecay_eligTreesRoad",
+        feature = "trees",
         carryKey = "WDecay_carryTreesRoad",
         placedKey = "WDecay_placedTreesRoad",
         eligible = function(checkResult, level)
@@ -280,6 +444,7 @@ local carryCategories = {
     {
         scaleCategory = "nature",
         eligKey = "WDecay_eligBushesNatural",
+        feature = "bushes",
         carryKey = "WDecay_carryBushesNatural",
         placedKey = "WDecay_placedBushesNatural",
         eligible = function(checkResult, level)
@@ -297,6 +462,7 @@ local carryCategories = {
     {
         scaleCategory = "nature",
         eligKey = "WDecay_eligBushesRoad",
+        feature = "bushes",
         carryKey = "WDecay_carryBushesRoad",
         placedKey = "WDecay_placedBushesRoad",
         eligible = function(checkResult, level)
@@ -315,6 +481,7 @@ local carryCategories = {
     {
         scaleCategory = "nature",
         eligKey = "WDecay_eligBushesIndoor",
+        feature = "bushes",
         carryKey = "WDecay_carryBushesIndoor",
         placedKey = "WDecay_placedBushesIndoor",
         scanAllLevels = true,
@@ -335,6 +502,7 @@ local carryCategories = {
     {
         scaleCategory = "nature",
         eligKey = "WDecay_eligGrassNatural",
+        feature = "grass",
         carryKey = "WDecay_carryGrassNatural",
         placedKey = "WDecay_placedGrassNatural",
         eligible = function(checkResult, level)
@@ -352,6 +520,7 @@ local carryCategories = {
     {
         scaleCategory = "nature",
         eligKey = "WDecay_eligGrassRoad",
+        feature = "grass",
         carryKey = "WDecay_carryGrassRoad",
         placedKey = "WDecay_placedGrassRoad",
         eligible = function(checkResult, level)
@@ -370,6 +539,7 @@ local carryCategories = {
     {
         scaleCategory = "nature",
         eligKey = "WDecay_eligGrassIndoor",
+        feature = "grass",
         carryKey = "WDecay_carryGrassIndoor",
         placedKey = "WDecay_placedGrassIndoor",
         scanAllLevels = true,
@@ -398,6 +568,13 @@ for c = 1, #carryCategories do
     end
 end
 
+local function isCarryCategoryEnabled(cat)
+    return not cat.feature or WDecay_Features.isEnabled(cat.feature)
+end
+
+-- Keep eligibility bookkeeping even when redecay is currently disabled.
+-- Sandbox settings can be enabled later, and existing chunks need this data
+-- for their first redecay pass.
 local function recordEligibility(markerData, checkResult, level)
     for c = 1, #carryCategories do
         local cat = carryCategories[c]
@@ -405,7 +582,12 @@ local function recordEligibility(markerData, checkResult, level)
             markerData[cat.eligKey] = (markerData[cat.eligKey] or 0) + 1
         end
     end
+end
 
+-- Read by processChunkCarry (redecay: run urban carry modifiers?) and
+-- WDecay_Vines_Reseason.lua (seasonal bias: vines possible here at all?
+-- they're wall/fence overlays with no placed-count of their own).
+local function recordUrbanFlag(markerData, checkResult)
     if checkResult.isUrban == true and markerData["WDecay_hasUrban"] ~= true then
         markerData["WDecay_hasUrban"] = true
     end
@@ -429,7 +611,7 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
         local pendingCarry = {}
         for c = 1, #carryCategories do
             local cat = carryCategories[c]
-            local eligibleCount = markerData[cat.eligKey] or 0
+            local eligibleCount = isCarryCategoryEnabled(cat) and (markerData[cat.eligKey] or 0) or 0
             if eligibleCount > 0 then
                 local basePercent = cat.basePercent({ isNatural = true })
                 if basePercent > 0 then
@@ -447,14 +629,18 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
                 end
             end
         end
-        local doVines = WDecay_Vines_ApplyToSquare ~= nil
-        local doUrban = markerData["WDecay_hasUrban"] == true
+        local doVines = WDecay_Vines_ApplyToSquare ~= nil and WDecay_Features.isEnabled("vines")
+        local hasUrban = markerData["WDecay_hasUrban"] == true
+        local doWalls = hasUrban and WDecay_Features.isEnabled("walls")
+        local doBarricades = hasUrban and WDecay_Features.isEnabled("barricades")
+        local doFences = hasUrban and WDecay_Features.isEnabled("fences")
+        local doDestroyed = hasUrban and WDecay_Features.isEnabled("destroyedDoorsWindows")
         local positionsByCat = nil
         if pending then
             positionsByCat = {}
             for c in pairs(pending) do positionsByCat[c] = {} end
         end
-        local needAllLevels = doVines or doUrban
+        local needAllLevels = doVines or doWalls or doBarricades or doFences or doDestroyed
         if pending and carryNeedsAllLevels and not needAllLevels then
             for c in pairs(pending) do
                 if carryCategories[c].scanAllLevels then
@@ -476,7 +662,10 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
             pendingCarry = pendingCarry,
             finalElig = {},
             doVines = doVines,
-            doUrban = doUrban,
+            doWalls = doWalls,
+            doBarricades = doBarricades,
+            doFences = doFences,
+            doDestroyed = doDestroyed,
             phase = "scan",
             minZ = minZ,
             maxZ = maxZ,
@@ -512,12 +701,10 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
                         end
                     end
                     if state.doVines and not runCarryModifier(WDecay_Vines_ApplyToSquare, square, checkResult, state.z, "vines") then state.failed = true end
-                    if state.doUrban then
-                        if not runCarryModifier(WDecay_Walls_ApplyToSquare, square, checkResult, state.z, "walls") then state.failed = true end
-                        if not runCarryModifier(WDecay_Barricades_ApplyToSquare, square, checkResult, state.z, "barricades") then state.failed = true end
-                        if not runCarryModifier(WDecay_Fences_ApplyToSquare, square, checkResult, state.z, "fences") then state.failed = true end
-                        if not runCarryModifier(WDecay_Destroyed_ApplyToSquare, square, checkResult, state.z, "destroyed") then state.failed = true end
-                    end
+                    if state.doWalls and not runCarryModifier(WDecay_Walls_ApplyToSquare, square, checkResult, state.z, "walls") then state.failed = true end
+                    if state.doBarricades and not runCarryModifier(WDecay_Barricades_ApplyToSquare, square, checkResult, state.z, "barricades") then state.failed = true end
+                    if state.doFences and not runCarryModifier(WDecay_Fences_ApplyToSquare, square, checkResult, state.z, "fences") then state.failed = true end
+                    if state.doDestroyed and not runCarryModifier(WDecay_Destroyed_ApplyToSquare, square, checkResult, state.z, "destroyed") then state.failed = true end
                 end
             end
             state.x = state.x + 1
@@ -590,6 +777,7 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
     if state.nowDays then state.markerData["WDecay_doneAtDays"] = math.floor(state.nowDays) end
     state.markerData["WDecay_done"] = CACHE_VERSION
     chunkWork[key] = nil
+    chunkSucceeded(key)
     if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
         WDecay_Debug.totalChunksProcessed = WDecay_Debug.totalChunksProcessed + 1
     end
@@ -609,7 +797,9 @@ local function processChunkSquares(chunk, key, deadline)
             markerSquare = nil
             z = z + 1
         end
-        if not markerSquare then return false end
+        if not markerSquare then
+            return chunkFailedTransiently(key, "still has no grid square")
+        end
         local markerData = markerSquare:getModData()
         local doneAtDays = nil
         if markerData["WDecay_done"] == CACHE_VERSION then
@@ -644,14 +834,20 @@ local function processChunkSquares(chunk, key, deadline)
         if chunk.wx ~= state.wx or chunk.wy ~= state.wy or not markerSquare or not markerSquare:getChunk()
             or math.floor(markerSquare:getX() / 8) ~= state.wx or math.floor(markerSquare:getY() / 8) ~= state.wy
             or markerSquare:getModData() ~= state.markerData then
+            -- Chunk got unloaded/reloaded between the last "pending" tick and
+            -- this resume attempt.
             chunkWork[key] = nil
-            return false
+            return chunkFailedTransiently(key, "was unloaded mid-processing (resume check failed)")
         end
         if state.mode == "carry" then
             return processChunkCarry(chunk, key, markerSquare, state.markerData, state.doneAtDays, deadline)
         end
     end
 
+    -- Keep these counters and snapshots for future settings changes. A world
+    -- may be generated with redecay/seasonal bias disabled and enable either
+    -- option later; omitting the data would make those existing chunks
+    -- impossible to redecay or reseason correctly.
     WDecay_Scaling.setRedecayContext(nil)
     while state.z <= state.maxLevel do
         if deadline and getTimestampMs() >= deadline then
@@ -666,6 +862,7 @@ local function processChunkSquares(chunk, key, deadline)
             if checkResult then
                 local existingObjects = snapshotObjects(square)
                 recordEligibility(state.markerData, checkResult, state.z)
+                recordUrbanFlag(state.markerData, checkResult)
                 if not dispatchGenerators(square, checkResult, state.z) then state.failed = true end
                 recordNewPlacements(state.markerData, square, checkResult, existingObjects)
             end
@@ -691,6 +888,7 @@ local function processChunkSquares(chunk, key, deadline)
     local nowDays = WDecay_Scaling.getWorldAgeDays()
     if nowDays then state.markerData["WDecay_doneAtDays"] = math.floor(nowDays) end
     chunkWork[key] = nil
+    chunkSucceeded(key)
     if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
         WDecay_Debug.totalChunksProcessed = WDecay_Debug.totalChunksProcessed + 1
     end
@@ -739,8 +937,10 @@ local function enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
     return 1
 end
 
+-- Returns how many chunks this pass queued -- feeds the scan-interval
+-- backoff in OnTick (0 queued means nothing new to find right now).
 local function ScanChunksAroundPos(worldX, worldY, radius)
-    if not modDataTable then return end
+    if not modDataTable then return 0 end
 
     local cx0 = math.floor((worldX - radius * 8) / 8)
     local cx1 = math.floor((worldX + radius * 8) / 8)
@@ -752,7 +952,7 @@ local function ScanChunksAroundPos(worldX, worldY, radius)
     for wx = cx0, cx1 do
         for wy = cy0, cy1 do
             local key = GenerateKey(wx, wy)
-            if pendingChunks[key] then
+            if pendingChunks[key] or isChunkInFailCooldown(key) then
             elseif seenChunks[key] and redecayEnabled then
                 local sq = getSquare(wx * 8, wy * 8, 0)
                 if sq and isChunkMarkedDone(sq) and needsRedecay(sq, scanDays) then
@@ -780,6 +980,8 @@ local function ScanChunksAroundPos(worldX, worldY, radius)
     if DEBUG_MODE and queued > 0 then
         print("[WDecay] Scan queued " .. queued .. " chunks around " .. worldX .. "," .. worldY)
     end
+
+    return queued
 end
 
 local function queueChunk(chunk)
@@ -796,7 +998,7 @@ local function queueChunk(chunk)
     end
 
     local key = GenerateKey(wx, wy)
-    if seenChunks[key] or pendingChunks[key] then return end
+    if seenChunks[key] or pendingChunks[key] or isChunkInFailCooldown(key) then return end
 
     local markerSquare = getMarkerSquare(chunk)
     local marked = isChunkMarkedDone(markerSquare)
@@ -808,6 +1010,7 @@ local function queueChunk(chunk)
         return
     end
 
+    ensureOnTickRegistered()
     pendingChunks[key] = true
     local targetDist = 999999
     local cx, cy = wx * 8 + 4, wy * 8 + 4
@@ -836,7 +1039,7 @@ local function initModDataCache()
     modDataTable = ModData.getOrCreate("WDecay_ChunkCache")
     if not modDataTable then return end
 
-    if not modDataTable._version or modDataTable._version ~= CACHE_VERSION then
+    if not modDataTable._version or modDataTable._version ~= SCAN_CACHE_VERSION then
         local keysToClear = {}
         for k in pairs(modDataTable) do
             if k ~= "_seed" then
@@ -848,7 +1051,7 @@ local function initModDataCache()
             modDataTable[keysToClear[i]] = nil
         end
 
-        modDataTable._version = CACHE_VERSION
+        modDataTable._version = SCAN_CACHE_VERSION
         seenChunks = {}
         seenChunksCount = 0
         if DEBUG_MODE then
@@ -946,7 +1149,7 @@ local function processNextQueuedChunk(highPriority, deadline)
     return true
 end
 
-local function OnTick()
+function OnTick()
     if isClient() then return end
 
     if not dispatcherConfigLoaded then
@@ -977,9 +1180,11 @@ local function OnTick()
     end
 
     scanTimer = scanTimer + 1
-    if scanTimer >= scanInterval then
+    if scanTimer >= scanInterval * scanBackoffMultiplier then
         scanTimer = 0
         if modDataTable then
+            local totalQueued = 0
+            local movedToNewChunk = false
             local scannedLocal = false
             local numPlayers = 1
             if getNumActivePlayers then
@@ -998,9 +1203,12 @@ local function OnTick()
                             spawnY = py
                         end
 
-                        local ok, err = pcall(ScanChunksAroundPos, px, py, SCAN_RADIUS)
-                        if not ok then
-                            print("[WDecay] Scan error: " .. tostring(err):sub(1, 120))
+                        if scanTrackerMoved("local:" .. playerIndex, px, py) then movedToNewChunk = true end
+                        local ok, result = pcall(ScanChunksAroundPos, px, py, SCAN_RADIUS)
+                        if ok then
+                            totalQueued = totalQueued + (result or 0)
+                        else
+                            print("[WDecay] Scan error: " .. tostring(result):sub(1, 120))
                         end
                     end
                 end
@@ -1022,9 +1230,12 @@ local function OnTick()
                                         spawnY = py
                                     end
 
-                                    local ok, err = pcall(ScanChunksAroundPos, px, py, SCAN_RADIUS)
-                                    if not ok then
-                                        print("[WDecay] Scan error: " .. tostring(err):sub(1, 120))
+                                    if scanTrackerMoved("online:" .. i, px, py) then movedToNewChunk = true end
+                                    local ok, result = pcall(ScanChunksAroundPos, px, py, SCAN_RADIUS)
+                                    if ok then
+                                        totalQueued = totalQueued + (result or 0)
+                                    else
+                                        print("[WDecay] Scan error: " .. tostring(result):sub(1, 120))
                                     end
                                 end
                             end
@@ -1040,10 +1251,18 @@ local function OnTick()
                 end
 
                 spawnAttempts = spawnAttempts + 1
-                local ok, err = pcall(ScanChunksAroundPos, spawnX, spawnY, radius)
-                if not ok then
-                    print("[WDecay] Spawn scan error: " .. tostring(err):sub(1, 120))
+                local ok, result = pcall(ScanChunksAroundPos, spawnX, spawnY, radius)
+                if ok then
+                    totalQueued = totalQueued + (result or 0)
+                else
+                    print("[WDecay] Spawn scan error: " .. tostring(result):sub(1, 120))
                 end
+            end
+
+            if totalQueued > 0 or movedToNewChunk then
+                scanBackoffMultiplier = 1
+            else
+                scanBackoffMultiplier = math.min(scanBackoffMultiplier * 2, SCAN_BACKOFF_MAX_MULTIPLIER)
             end
         end
     end
@@ -1137,6 +1356,7 @@ local function forEachChunkAround(radius, fn)
 end
 
 function WDecay_Dispatcher_QueueArea(radius, wipeMarkers)
+    ensureOnTickRegistered()
     radius = radius or 3
     local queued = 0
 

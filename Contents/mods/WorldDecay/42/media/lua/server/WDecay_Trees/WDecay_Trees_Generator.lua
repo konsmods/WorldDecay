@@ -53,6 +53,8 @@ end
 if not WDecay_PlacementGenerators then WDecay_PlacementGenerators = {} end
 
 table.insert(WDecay_PlacementGenerators, LoadGridsquare)
+if not WDecay_PlacementGeneratorFeatures then WDecay_PlacementGeneratorFeatures = {} end
+WDecay_PlacementGeneratorFeatures[#WDecay_PlacementGenerators] = "trees"
 
 Events.EveryDays.Add(WDecay_Trees.resetCaches)
 
