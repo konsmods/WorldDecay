@@ -1,4 +1,4 @@
-[h1]2.1.4 - PENDING[/h1]
+[h1]2.1.4[/h1]
 [list]
 [*]Added a Fast Travel Speed and Fast Travel Time Budget option: while driving above that speed, the dispatcher temporarily uses a smaller per-tick time budget to reduce stutter during highway driving.
 [*]Fixed chunk priority being measured from the player's spawn point instead of their current position, so chunks near the player only got fast-tracked while still close to spawn -- everything loaded while driving further away was quietly deprioritized.
