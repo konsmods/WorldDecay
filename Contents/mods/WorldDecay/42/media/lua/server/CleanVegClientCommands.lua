@@ -1,5 +1,8 @@
 require('luautils')
 local WDecay_CleanVegetation = require('wdecay_cleanvegetation/wdecay_cleanvegetation')
+local WDecay_Season = require('wdecay_season/wdecay_season')
+
+local SEASONAL_DEBUG_MODULE = "WDecaySeasonalDebug"
 
 local REMOVABLE_MARKER_TYPES = {
     grass = true,
@@ -198,4 +201,49 @@ local function onCleanVegCommand(module, command, player, args)
     end
 end
 
+local function advanceSeasonalDebugMonth()
+    local gameTime = getGameTime()
+    if not gameTime then return end
+
+    gameTime:setMonth(gameTime:getMonth() + 1)
+    if gameTime:getMonth() >= 12 then
+        gameTime:setMonth(0)
+        gameTime:setYear(gameTime:getYear() + 1)
+    end
+
+    WDecay_Season.invalidateCache()
+    print("[WorldDecay Debug] Advanced to month " .. (gameTime:getMonth() + 1) .. "/" .. gameTime:getYear())
+end
+
+-- Seasonal debug actions originate in the client context menu, but the
+-- vegetation objects are server-owned in both hosted SP and MP. Always route
+-- these actions through OnClientCommand so a dedicated server does the actual
+-- sweep and transmits the sprite/overlay changes to every client.
+local function onSeasonalDebugCommand(module, command, player, args)
+    if module ~= SEASONAL_DEBUG_MODULE or command ~= "Run" or type(args) ~= "table" then
+        return
+    end
+
+    local action = args.action
+    if action == "advanceMonth" then
+        advanceSeasonalDebugMonth()
+        return
+    end
+
+    local debugFunctions = {
+        trees = "reseasonNearbyTrees",
+        bushes = "reseasonNearbyBushes",
+        grass = "reseasonNearbyGrass",
+        vines = "reseasonNearbyVines",
+    }
+    local functionName = debugFunctions[action]
+    local debugFunction = functionName and WD_DebugTools and WD_DebugTools[functionName]
+    if debugFunction then
+        debugFunction()
+    else
+        print("[WorldDecay Debug] Seasonal action unavailable on server: " .. tostring(action))
+    end
+end
+
 Events.OnClientCommand.Add(onCleanVegCommand)
+Events.OnClientCommand.Add(onSeasonalDebugCommand)

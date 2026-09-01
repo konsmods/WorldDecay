@@ -1,3 +1,10 @@
+[h1]2.1.5[/h1]
+[list]
+[*]Fixed seasonal refreshes for already-generated trees, bushes, grass objects, and vines in SP and MP.
+[*]Seasonal sweeps now use the configured scan radius around active players.
+[*]Fixed seasonal debug commands in MP and phase-qualified season names.
+[/list]
+
 [h1]2.1.4[/h1]
 [list]
 [*]Added Fast Travel Speed and Time Budget options to reduce stutter while driving fast.

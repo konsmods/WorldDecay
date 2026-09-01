@@ -11,6 +11,28 @@ local WDecay_Season = {}
 local SEASON_NAME_TO_VALUE = { Winter = 0, Spring = 1, Summer = 2, Autumn = 4 }
 local KNOWN_SEASON_NAMES = { Spring = true, Summer = true, Autumn = true, Winter = true }
 
+-- B42 can return phase-qualified names such as "Early Summer" and "Late
+-- Autumn". The rest of WorldDecay works with the four canonical seasons, so
+-- preserve the climate manager's season while discarding only that phase
+-- prefix. Falling back to the calendar month for these names made a debug
+-- jump (and custom season lengths) report/use the wrong season.
+local function normalizeSeasonName(name)
+    if not name then return nil end
+
+    if KNOWN_SEASON_NAMES[name] then
+        return name
+    end
+
+    local text = tostring(name)
+    for _, seasonName in ipairs({ "Spring", "Summer", "Autumn", "Winter" }) do
+        if string.find(text, seasonName, 1, true) then
+            return seasonName
+        end
+    end
+
+    return nil
+end
+
 -- getClimateManager():getSeasonName() isn't reliably ready during the initial
 -- burst of chunk generation when a world is first created -- fall back to
 -- simple calendar-month bucketing (same idea NTP uses), which is always
@@ -43,8 +65,9 @@ Events.EveryTenMinutes.Add(WDecay_Season.invalidateCache)
 function WDecay_Season.getSeasonName()
     if cachedSeasonName == nil then
         local climate = getClimateManager()
-        local seasonName = climate and climate:getSeasonName()
-        if not seasonName or not KNOWN_SEASON_NAMES[seasonName] then
+        local rawSeasonName = climate and climate:getSeasonName()
+        local seasonName = normalizeSeasonName(rawSeasonName)
+        if not seasonName then
             seasonName = getFallbackSeasonName()
         end
         cachedSeasonName = seasonName or false

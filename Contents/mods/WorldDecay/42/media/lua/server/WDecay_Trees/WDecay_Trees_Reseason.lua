@@ -1,27 +1,12 @@
--- Vanilla's own erosion-tracked trees update their sprite live as the season
--- changes (see the research behind pickTreeSprites() in WDecay_Trees.lua), but
--- that only applies to objects the private erosion simulation is tracking --
--- there's no hook to register an externally-spawned tree into it. This gives
--- our own already-placed trees the same live behavior: checked every ten
--- minutes (matching vanilla's own ErosionMain.EveryTenMinutes() rate), but
--- the actual sweep only runs when season or snow has actually changed since
--- the last check -- most ten-minute ticks are a no-op, same as vanilla's own
--- per-object cooldown checks mostly finding nothing to do. The sweep itself
--- covers a generous radius around every online player (see
--- wdecay_loaded_chunks.lua for why it's not vanilla's own loaded-cells list --
--- that turned out not to be reachable from Lua at all).
+-- Reseasons WorldDecay trees every ten minutes when season or snow changes.
 
 local WDecay_Trees = require('WDecay_Trees/WDecay_Trees')
-local WDecay_Season = require('wdecay_season/wdecay_season')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 local WDecay_Features = require('wdecay_features/wdecay_features')
 local WDecay_CleanVegetation = require('wdecay_cleanvegetation/wdecay_cleanvegetation')
 local WDecay_LoadedChunks = require('wdecay_loaded_chunks/wdecay_loaded_chunks')
 
--- Reverse-parses a WorldDecay tree's current sprite name back into the
--- species/tier/column it was spawned with, so we know what it should look
--- like right now. Matches against both the plain base frame and the snow
--- swap-in frame, since either could be the tree's current sprite.
+-- Parses a tree sprite into its species, tier, and column.
 local function parseTreeSprite(spriteName)
     if not spriteName then return nil end
 
@@ -57,8 +42,7 @@ local function currentAttachedChildSprite(object)
     return WDecay_CleanVegetation.getAttachedSpriteName(attached:get(0))
 end
 
--- Returns true if the tree was actually a WorldDecay tree we could evaluate
--- (regardless of whether it needed a change), false if it wasn't one of ours.
+-- Returns true when the object is a recognized WorldDecay tree.
 local function reseasonTree(object)
     local spriteName = object:getSpriteName()
     local species, tier, prefix, column = parseTreeSprite(spriteName)
@@ -93,8 +77,7 @@ local function reseasonTree(object)
     return true
 end
 
--- Shared by both the periodic radius sweep and the chunk-load hook below.
--- Returns evaluated, changed counts.
+-- Reseasons recognized trees on one square.
 local function reseasonSquare(square)
     local objects = square and square:getObjects()
     if not objects then return 0, 0 end
@@ -115,19 +98,9 @@ local function reseasonSquare(square)
     return evaluated, changed
 end
 
--- Used both standalone (chunk-load hook) and as the per-chunk unit of the
--- full sweep below. Returns evaluated, changed counts. Bails immediately if
--- the chunk never placed a tree, rather than walking all ~512 squares to
--- find nothing every time this chunk streams back in.
+-- Reseasons all tree objects in one chunk.
 local function reseasonChunk(chunk)
     if not chunk then return 0, 0 end
-
-    local markerSquare = WDecay_LoadedChunks.getMarkerSquare(chunk)
-    local markerData = markerSquare and markerSquare:getModData()
-    if markerData then
-        local placed = (markerData["WDecay_placedTreesNatural"] or 0) + (markerData["WDecay_placedTreesRoad"] or 0)
-        if placed <= 0 then return 0, 0 end
-    end
 
     local evaluated, changed = 0, 0
     for z = chunk:getMinLevel(), chunk:getMaxLevel() do
@@ -142,23 +115,8 @@ local function reseasonChunk(chunk)
     return evaluated, changed
 end
 
-local warnedMissingLoadedChunks = false
-
--- Used only by the manual debug trigger below -- the automatic sweep goes
--- through WDecay_LoadedChunks.registerReseasonCallback instead (see
--- registerIfEnabled), which walks every loaded square once for all modules.
+-- Manual full-area reseason helper.
 local function reseasonAllLoadedChunks()
-    if not (WDecay_LoadedChunks and WDecay_LoadedChunks.forEachLoadedSquare) then
-        -- require() can fail on a brand-new shared module until the game is
-        -- fully restarted (not just a save reload) -- don't let that turn
-        -- into a repeating exception every ten minutes.
-        if not warnedMissingLoadedChunks then
-            warnedMissingLoadedChunks = true
-            print("[WorldDecay] WDecay_LoadedChunks not available (requires a full game restart after this update)")
-        end
-        return 0, 0
-    end
-
     local totalEvaluated, totalChanged = 0, 0
     WDecay_LoadedChunks.forEachLoadedSquare(function(square)
         local evaluated, changed = reseasonSquare(square)
@@ -168,9 +126,7 @@ local function reseasonAllLoadedChunks()
     return totalEvaluated, totalChanged
 end
 
--- Only register the LoadChunk/full-sweep hooks if seasonal bias and trees
--- are both on -- otherwise there's nothing to reseason. Events.OnGameStart
--- is the readiness point WDecay_Dispatcher.lua's own config load relies on.
+-- Registers seasonal hooks only when seasonal tree processing is enabled.
 local registered = false
 local function registerIfEnabled()
     if registered then return end
@@ -183,11 +139,7 @@ end
 
 Events.OnGameStart.Add(registerIfEnabled)
 
--- Manual trigger for testing -- same global-table pattern WD_DebugTools.lua
--- already uses so the client debug menu can reach this without a full
--- client/server command round-trip (debug-only; see that file's own
--- SP-shared-Lua-state precedent for printMetric()/benchmark()). Bypasses the
--- toggle above, same as WD_DebugTools.generateSquare for manual testing.
+-- Debug helper that bypasses feature gating.
 WD_DebugTools = WD_DebugTools or {}
 function WD_DebugTools.reseasonNearbyTrees()
     local evaluated, changed = reseasonAllLoadedChunks()

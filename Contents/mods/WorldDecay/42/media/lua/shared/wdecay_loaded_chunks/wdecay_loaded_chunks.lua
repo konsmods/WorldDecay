@@ -1,65 +1,48 @@
--- Originally tried to mirror vanilla's own ErosionMain.mainTimer() exactly,
--- which walks ServerMap.instance.loadedCells -- but ServerMap turns out to
--- NOT be a Lua-exposed class at all (confirmed by decompiling: no other class
--- in the game, including the Lua exposure list, references it), so
--- `ServerMap.instance` from Lua is just nil and indexing `.loadedCells` on it
--- throws "attempted index: instance of non-table: null".
---
--- IsoCell/IsoChunkMap looked like a substitute, but it's keyed by *local*
--- IsoPlayer.numPlayers (split-screen slots, not online player count), and
--- IsoCell.getGridSquare() only forwards to the real ServerMap.getGridSquare()
--- when GameServer.server is true -- IsoCell.getChunk() has no such branch, so
--- it can't be trusted to reflect real server-loaded state either.
---
--- getSquare(x, y, z) (the plain global every mod already uses) DOES have that
--- branch: on an actual server it calls straight through to
--- ServerMap.getGridSquare(), which is a passive lookup into the currently-
--- active ServerCell (verified via bytecode -- it returns nil rather than
--- forcing a chunk load), so it's safe to probe with at arbitrary coordinates.
--- We approximate "everything currently loaded" by sweeping a generous radius
--- around each online player instead of enumerating a server-internal list --
--- that's the same thing that determines what actually gets/stays loaded in
--- the first place.
+-- Scans loaded squares around active players because the loaded-cell list is not Lua-exposed.
 local WDecay_Season = require('wdecay_season/wdecay_season')
 
 local WDecay_LoadedChunks = {}
 
-local CHUNK_SIZE = 10
-local RADIUS_CHUNKS = 15 -- ~150 tiles around each player
+local CHUNK_SIZE = 8
+local DEFAULT_RADIUS_CHUNKS = 15
 local PROBE_MIN_LEVEL = -2
 local PROBE_MAX_LEVEL = 7
 
--- Calls fn(square) once for every loaded square within range of any online
--- player. Skips a whole chunk x z-level slice with a single nil probe rather
--- than testing all 100 of its squares individually, since most of the swept
--- volume above/below ground level is empty.
+local function getRadiusChunks()
+    local sandbox = getSandboxOptions and getSandboxOptions()
+    local option = sandbox and sandbox:getOptionByName('WDecay.scanRadius')
+    local value = option and tonumber(option:getValue())
+    if not value then return DEFAULT_RADIUS_CHUNKS end
+
+    -- scanRadius is a half-width; 15 means a 31x31 chunk sweep.
+    return math.max(1, math.floor(value))
+end
+
+-- Calls fn for loaded squares around local SP/host and online MP players.
 function WDecay_LoadedChunks.forEachLoadedSquare(fn)
-    local players = getOnlinePlayers()
-    if not players then return end
-
     local seenChunks = {}
+    local radiusChunks = getRadiusChunks()
 
-    for i = 0, players:size() - 1 do
-        local player = players:get(i)
-        if player then
-            local originChunkX = math.floor(player:getX() / CHUNK_SIZE)
-            local originChunkY = math.floor(player:getY() / CHUNK_SIZE)
+    local function scanPlayer(player)
+        if not player then return end
 
-            for ccx = originChunkX - RADIUS_CHUNKS, originChunkX + RADIUS_CHUNKS do
-                for ccy = originChunkY - RADIUS_CHUNKS, originChunkY + RADIUS_CHUNKS do
-                    local key = ccx .. "," .. ccy
-                    if not seenChunks[key] then
-                        seenChunks[key] = true
-                        local originX = ccx * CHUNK_SIZE
-                        local originY = ccy * CHUNK_SIZE
+        local originChunkX = math.floor(player:getX() / CHUNK_SIZE)
+        local originChunkY = math.floor(player:getY() / CHUNK_SIZE)
 
-                        for z = PROBE_MIN_LEVEL, PROBE_MAX_LEVEL do
-                            if getSquare(originX, originY, z) then
-                                for sx = 0, CHUNK_SIZE - 1 do
-                                    for sy = 0, CHUNK_SIZE - 1 do
-                                        local square = getSquare(originX + sx, originY + sy, z)
-                                        if square then fn(square) end
-                                    end
+        for ccx = originChunkX - radiusChunks, originChunkX + radiusChunks do
+            for ccy = originChunkY - radiusChunks, originChunkY + radiusChunks do
+                local key = ccx .. "," .. ccy
+                if not seenChunks[key] then
+                    seenChunks[key] = true
+                    local originX = ccx * CHUNK_SIZE
+                    local originY = ccy * CHUNK_SIZE
+
+                    for z = PROBE_MIN_LEVEL, PROBE_MAX_LEVEL do
+                        if getSquare(originX, originY, z) then
+                            for sx = 0, CHUNK_SIZE - 1 do
+                                for sy = 0, CHUNK_SIZE - 1 do
+                                    local square = getSquare(originX + sx, originY + sy, z)
+                                    if square then fn(square) end
                                 end
                             end
                         end
@@ -68,26 +51,21 @@ function WDecay_LoadedChunks.forEachLoadedSquare(fn)
             end
         end
     end
-end
 
--- Shared by the dispatcher and the four WDecay_*_Reseason.lua modules for
--- their marker-based "does this chunk have any of our objects" checks.
-function WDecay_LoadedChunks.getMarkerSquare(chunk)
-    local square = chunk:getGridSquare(0, 0, 0)
-    if square then return square end
-
-    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
-        square = chunk:getGridSquare(0, 0, z)
-        if square then return square end
+    -- Include the local player because getOnlinePlayers may omit SP/host players.
+    if getSpecificPlayer then
+        scanPlayer(getSpecificPlayer(0))
     end
 
-    return nil
+    local onlinePlayers = getOnlinePlayers()
+    if onlinePlayers then
+        for i = 0, onlinePlayers:size() - 1 do
+            scanPlayer(onlinePlayers:get(i))
+        end
+    end
 end
 
--- The four WDecay_*_Reseason.lua modules each want a per-square seasonal
--- update check across every loaded square. Rather than each running its own
--- full forEachLoadedSquare() sweep (same squares, walked four times), they
--- register a callback here so the walk happens once for all of them.
+-- Registered callbacks share one loaded-square sweep.
 local reseasonCallbacks = {}
 
 function WDecay_LoadedChunks.registerReseasonCallback(fn)
