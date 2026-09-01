@@ -96,7 +96,19 @@ local function LoadGridsquare(square, checkResult, level)
 
             --Is fence prop is brokeable and bendable and not damaged?
             if fenceProp ~= NoBrokenAndNotBendableFenceCache then --That's not neaded: 'and WDecay_Fences.isNotDamaged(obj) then'
-                local chance = WDecay_Scaling.scale(getFenceBendChance())
+                -- The two override settings apply to different fence types.
+                -- A zero override means "use Fence Percentage", matching the
+                -- sandbox option descriptions and keeping the base setting
+                -- useful for both kinds of fence.
+                local baseChance = getFencePercentage()
+                local chance = 0
+                if fenceProp == BrokenFenceCache then
+                    chance = getFenceBreakChance()
+                elseif fenceProp == BendableFenceCache then
+                    chance = getFenceBendChance()
+                end
+                if chance <= 0 then chance = baseChance end
+                chance = WDecay_Scaling.scale(chance)
 
                 if chance > 0 and chance >= randomizer:random(1, 100) then
                     --Broke or Bendable Fence? 

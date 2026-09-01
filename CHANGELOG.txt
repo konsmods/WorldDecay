@@ -1,5 +1,7 @@
 [h1]2.1.4 - PENDING[/h1]
 [list]
+[*]Fixed World Decay floor overlays occasionally appearing twice. The engine now performs normal tile-load overlay placement; World Decay only repairs duplicates left by the previous manual path and registers late indoor/roof tile types safely.
+[*]Fixed fence decay chance selection: breakable fences use Fence Break Chance, bendable fences use Fence Bend Chance, and a zero override correctly falls back to Fence Percentage. Fence generation now remains enabled when any of those three settings is non-zero.
 [*]Renamed sandbox pages to use the full World Decay name and moved divider options into the WDecay namespace.
 [*]Added per-feature toggles (Trees, Bushes, Grass, Vines, Overlays, Barricades, Destroyed Doors & Windows, Walls, Fences) to the main sandbox page so a disabled feature is skipped entirely during generation instead of just being set to 0%.
 [*]Major performance pass: the mod now goes fully idle once an area is generated and stays idle, instead of continuing to do per-chunk and per-tick work indefinitely regardless of settings. Chunk-load reseasoning (Seasonal Vegetation Bias) is now properly gated by its own sandbox option -- previously it ran unconditionally on every chunk load even with the setting off. If you had it off and are curious, this is likely the largest single reduction.

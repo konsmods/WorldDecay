@@ -70,7 +70,10 @@ local featureDefs = {
     },
     fences = {
         toggle = 'enableFences',
-        percentages = { 'fencePercentage' },
+        -- Break/Bend Chance values override the base Fence Percentage for
+        -- their respective fence types, so any of the three can make this
+        -- feature active.
+        percentages = { 'fencePercentage', 'fenceBreakChance', 'fenceBendChance' },
     },
 }
 

@@ -177,22 +177,42 @@ local function isOverlayName(name)
     return false
 end
 
-local function stripFloorOverlays(floor)
+-- The engine already applies TileOverlays as each grid square loads. Its
+-- update method appends rather than replaces, so older WorldDecay releases
+-- that called it again can leave two matching sprites. Preserve one existing
+-- overlay and remove only later duplicates from legacy marked floors.
+local function dedupeFloorOverlays(floor)
     local attached = floor:getAttachedAnimSprite()
     if not attached then return 0 end
 
     local removed = 0
+    local kept = false
     for n = attached:size() - 1, 0, -1 do
         local sp = attached:get(n)
         local parent = sp and sp:getParentSprite()
         local name = parent and parent:getName()
         if isOverlayName(name) then
-            floor:RemoveAttachedAnim(n)
-            removed = removed + 1
+            if kept then
+                floor:RemoveAttachedAnim(n)
+                removed = removed + 1
+            else
+                kept = true
+            end
         end
     end
 
     return removed
+end
+
+local function hasFloorOverlay(floor)
+    local attached = floor:getAttachedAnimSprite()
+    if not attached then return false end
+    for n = 0, attached:size() - 1 do
+        local sprite = attached:get(n)
+        local parent = sprite and sprite:getParentSprite()
+        if isOverlayName(parent and parent:getName()) then return true end
+    end
+    return false
 end
 
 local function registerLazyOverlay(tileName, config)
@@ -218,58 +238,49 @@ local function registerLazyOverlay(tileName, config)
     return false
 end
 
-local function isEligibleIndoorOverlay(square, checkResult)
-    return square and checkResult and not checkResult.cleaned
-        and checkResult.isIndoor == true and square:getFloor() ~= nil
+-- Natural and road tiles are registered before chunks stream in, so the
+-- engine applies them automatically. Indoor/roof tiles are lazily registered
+-- from their real floor name; for only that first encounter, add an overlay
+-- ourselves if the engine could not have done so already.
+local function registerLateLazyOverlay(square, floor, level)
+    if not WDecay_Features.isEnabled("overlays") or hasFloorOverlay(floor) then return end
+
+    local sprite = floor:getSprite()
+    local tileName = sprite and sprite:getName()
+    if not tileName then return end
+
+    local checkResult = WDecay_SquareCheck.checkAll(square, level)
+    local config = nil
+    if checkResult and checkResult.isIndoor then
+        config = lazyOverlayConfigs.indoor
+    elseif checkResult and checkResult.hasRoof then
+        config = lazyOverlayConfigs.roof
+    end
+    if config and registerLazyOverlay(tileName, config) then
+        -- This tile name was not in the overlay map during the engine's load
+        -- pass. It has no overlay yet, so this is the sole safe manual call.
+        local overlays = getTileOverlays()
+        if overlays then
+            overlays:updateTileOverlaySprite(floor)
+            floor:transmitUpdatedSpriteToClients()
+        end
+    end
 end
 
-function WDecay_Overlays_ApplyToChunk(chunk)
-    if TILEZED then return end
-    if not WDecay_Features.isEnabled("overlays") then return end
-
-    local overlays = getTileOverlays()
-    if not overlays then return end
-
+local function reconcileChunkOverlays(chunk)
+    if not chunk then return end
     for z = chunk:getMinLevel(), chunk:getMaxLevel() do
         for y = 0, 7 do
             for x = 0, 7 do
                 local square = chunk:getGridSquare(x, y, z)
                 local floor = square and square:getFloor()
                 local floorData = floor and floor:getModData()
-                if floor and floorData and not floorData["WDecay_OverlayApplied"] then
-                    local checkResult = WDecay_SquareCheck.checkAll(square, z)
-                    local sprite = floor:getSprite()
-                    local tileName = sprite and sprite:getName()
-                    local shouldUpdate = false
-
-                    if tileName and isEligibleIndoorOverlay(square, checkResult) then
-                        shouldUpdate = registerLazyOverlay(tileName, lazyOverlayConfigs.indoor)
-                    elseif tileName and checkResult and checkResult.hasRoof then
-                        shouldUpdate = registerLazyOverlay(tileName, lazyOverlayConfigs.roof)
-                    elseif z == 0 and checkResult and not checkResult.cleaned then
-                        shouldUpdate = true
+                if floor and floorData and floorData["WDecay_OverlayApplied"] then
+                    if dedupeFloorOverlays(floor) > 0 then
+                        floor:transmitUpdatedSpriteToClients()
                     end
-
-                    if shouldUpdate then
-                        overlays:updateTileOverlaySprite(floor)
-                        local attached = floor:getAttachedAnimSprite()
-                        local applied = false
-                        if attached then
-                            for n = 0, attached:size() - 1 do
-                                local attachedSprite = attached:get(n)
-                                local parent = attachedSprite and attachedSprite:getParentSprite()
-                                if isOverlayName(parent and parent:getName()) then
-                                    applied = true
-                                    break
-                                end
-                            end
-                        end
-                        if applied then
-                            floorData["WDecay_OverlayApplied"] = true
-                            floor:transmitModData()
-                            floor:transmitUpdatedSpriteToClients()
-                        end
-                    end
+                elseif floor then
+                    registerLateLazyOverlay(square, floor, z)
                 end
             end
         end
@@ -280,3 +291,7 @@ Events.OnInitGlobalModData.Add(function(isNewGame)
     sandboxCache = {}
     registerTileOverlays()
 end)
+
+-- Runs after the engine's own grid-load overlay pass. Fresh chunks need no
+-- work; this only repairs floors marked by the old manual application path.
+Events.LoadChunk.Add(reconcileChunkOverlays)
