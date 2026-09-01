@@ -4,7 +4,6 @@ local Tiles = require("WDecay_Overlays/Data/Tiles")
 local Sprites = require("WDecay_Overlays/Data/Sprites")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
-local WDecay_SquareCheck = require('wdecay_squarecheck/wdecay_squarecheck')
 local WDecay_Features = require('wdecay_features/wdecay_features')
 
 local randomizer = WDecay_Random.get()
@@ -241,15 +240,16 @@ end
 -- Natural and road tiles are registered before chunks stream in, so the
 -- engine applies them automatically. Indoor/roof tiles are lazily registered
 -- from their real floor name; for only that first encounter, add an overlay
--- ourselves if the engine could not have done so already.
-local function registerLateLazyOverlay(square, floor, level)
+-- ourselves if the engine could not have done so already. checkResult is the
+-- same per-square result the dispatcher already computed for this square this
+-- pass -- avoids a second, redundant native square-check here.
+local function registerLateLazyOverlay(square, floor, level, checkResult)
     if not WDecay_Features.isEnabled("overlays") or hasFloorOverlay(floor) then return end
 
     local sprite = floor:getSprite()
     local tileName = sprite and sprite:getName()
     if not tileName then return end
 
-    local checkResult = WDecay_SquareCheck.checkAll(square, level)
     local config = nil
     if checkResult and checkResult.isIndoor then
         config = lazyOverlayConfigs.indoor
@@ -267,23 +267,28 @@ local function registerLateLazyOverlay(square, floor, level)
     end
 end
 
-local function reconcileChunkOverlays(chunk)
-    if not chunk then return end
-    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
-        for y = 0, 7 do
-            for x = 0, 7 do
-                local square = chunk:getGridSquare(x, y, z)
-                local floor = square and square:getFloor()
-                local floorData = floor and floor:getModData()
-                if floor and floorData and floorData["WDecay_OverlayApplied"] then
-                    if dedupeFloorOverlays(floor) > 0 then
-                        floor:transmitUpdatedSpriteToClients()
-                    end
-                elseif floor then
-                    registerLateLazyOverlay(square, floor, z)
-                end
-            end
+-- Called once per square from the dispatcher's own budgeted, resumable scan
+-- (WDecay_Dispatcher.processChunkSquares) -- the same per-square pass that
+-- places trees/bushes/grass -- instead of its own unbounded, unbudgeted
+-- Events.LoadChunk hook. That old hook re-walked every square of every
+-- chunk on every load (client and server, done chunks included), which is
+-- exactly what made overlay reconciliation the dominant cost while fast
+-- chunk streaming (e.g. driving) queued up many LoadChunk events per tick.
+-- Folding it into the dispatcher means it now only runs once per square,
+-- the first time that square is processed, deadline-checked like everything
+-- else.
+function WDecay_Overlays_ReconcileSquare(square, checkResult, level)
+    if not WDecay_Features.isEnabled("overlays") then return end
+    local floor = square:getFloor()
+    if not floor then return end
+
+    local floorData = floor:getModData()
+    if floorData and floorData["WDecay_OverlayApplied"] then
+        if dedupeFloorOverlays(floor) > 0 then
+            floor:transmitUpdatedSpriteToClients()
         end
+    else
+        registerLateLazyOverlay(square, floor, level, checkResult)
     end
 end
 
@@ -291,7 +296,3 @@ Events.OnInitGlobalModData.Add(function(isNewGame)
     sandboxCache = {}
     registerTileOverlays()
 end)
-
--- Runs after the engine's own grid-load overlay pass. Fresh chunks need no
--- work; this only repairs floors marked by the old manual application path.
-Events.LoadChunk.Add(reconcileChunkOverlays)

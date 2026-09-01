@@ -766,7 +766,6 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
         return false
     end
     if WDecay_Overlays_RefreshQuiet then WDecay_Overlays_RefreshQuiet() end
-    if WDecay_Overlays_ApplyToChunk then WDecay_Overlays_ApplyToChunk(chunk) end
     for c = 1, #carryCategories do
         local cat = carryCategories[c]
         local carryValue = state.pendingCarry[c]
@@ -865,6 +864,7 @@ local function processChunkSquares(chunk, key, deadline)
                 recordUrbanFlag(state.markerData, checkResult)
                 if not dispatchGenerators(square, checkResult, state.z) then state.failed = true end
                 recordNewPlacements(state.markerData, square, checkResult, existingObjects)
+                if WDecay_Overlays_ReconcileSquare then WDecay_Overlays_ReconcileSquare(square, checkResult, state.z) end
             end
         end
         state.x = state.x + 1
@@ -883,7 +883,6 @@ local function processChunkSquares(chunk, key, deadline)
         chunkWork[key] = nil
         return false
     end
-    if WDecay_Overlays_ApplyToChunk then WDecay_Overlays_ApplyToChunk(chunk) end
     state.markerData["WDecay_done"] = CACHE_VERSION
     local nowDays = WDecay_Scaling.getWorldAgeDays()
     if nowDays then state.markerData["WDecay_doneAtDays"] = math.floor(nowDays) end
