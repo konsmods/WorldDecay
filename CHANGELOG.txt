@@ -1,3 +1,13 @@
+[h1]2.1.8 Pending[/h1]
+[list]
+[*]Added a resizable debug panel with General and Seasonal tabs.
+[*]Moved seasonal debug actions into the panel and wired them for SP and MP.
+[*]Added server-side debug commands for area cleaning, regeneration, re-decay, overlays, and timelapse.
+[*]Added safehouse protection for chunk processing and optional structural re-decay outside safehouses.
+[*]Kept vegetation re-decay separate from walls, windows, roofs, barricades, and other structural decay.
+[*]Improved player-positioned debug sweeps and re-decay context handling.
+[/list]
+
 [h1]2.1.7[/h1]
 [list]
 [*]Added simple clustering for trees, bushes, and grass objects, with separate sandbox toggles and boost controls.

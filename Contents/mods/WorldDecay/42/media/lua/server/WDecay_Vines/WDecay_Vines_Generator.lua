@@ -55,7 +55,7 @@ local function squareHasBlacklistedSprite(objs)
 end
 local function createVine(square,obj,isLow,objs)
     if not square or not obj then return end
-    if WDecay_Protection.isPlayerBuilt(obj) then return end
+    if WDecay_Protection.isPlayerBuilt(obj) and not WDecay_Scaling.isRedecayPass() then return end
     if squareHasVine(square,objs) then return end
     local sprN=obj:getSpriteName()
     if WDecay_Vines_SpriteRules.matches(sprN, WDecay_Vines_SpriteRules.skip) then return end
@@ -87,7 +87,7 @@ local function createVine(square,obj,isLow,objs)
 end
 local function LoadGridsquare(square,checkResult,level)
     if not checkResult then return end
-    if checkResult.cleaned then return end
+    if checkResult.cleaned and not WDecay_Scaling.isRedecayPass() then return end
     if not getMFV() and level~=0 then return end
     if isVEO() and checkResult.isIndoor then return end
     if WDecay_Scaling.scaleFor('nature',getVP())<randomizer:random(1,100) then return end
@@ -102,7 +102,7 @@ if not WDecay_ModifierGenerators then WDecay_ModifierGenerators={} end; table.in
 if not WDecay_ModifierGeneratorFeatures then WDecay_ModifierGeneratorFeatures={} end; WDecay_ModifierGeneratorFeatures[#WDecay_ModifierGenerators]="vines"
 function WDecay_Vines_ApplyToSquare(square,checkResult,level)
     if not square then return end
-    if checkResult and checkResult.cleaned then return end
+    if checkResult and checkResult.cleaned and not WDecay_Scaling.isRedecayPass() then return end
     if not getMFV() and level~=0 then return end
     if isVEO() and checkResult and checkResult.isIndoor then return end
     if WDecay_Scaling.scaleFor('nature',getVP())<randomizer:random(1,100) then return end

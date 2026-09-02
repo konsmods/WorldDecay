@@ -1,4 +1,5 @@
 local WDecay_Random = require('wdecay_random/wdecay_random')
+local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 local randomizer = WDecay_Random.get()
 local WDecay_Protection = require('wdecay_protection/wdecay_protection')
 
@@ -32,7 +33,7 @@ local function isEntityObject(obj)
 end
 
 function WDecay_Fences.getFenceProperty(obj)
-    if isEntityObject(obj) or WDecay_Protection.isPlayerBuilt(obj) then
+    if isEntityObject(obj) or (WDecay_Protection.isPlayerBuilt(obj) and not WDecay_Scaling.isRedecayPass()) then
         return NOT_BROKE_AND_BENDABLE_FENCE
     elseif classBentFences:isBentObject(obj) then
         return BENDABLE_FENCE

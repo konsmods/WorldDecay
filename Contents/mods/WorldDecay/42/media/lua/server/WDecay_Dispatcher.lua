@@ -228,6 +228,11 @@ local function GenerateKey(wx, wy)
     return (wx + KEY_OFFSET) * KEY_MULT + (wy + KEY_OFFSET)
 end
 
+local function isSafehouseChunk(wx, wy)
+    if not SafeHouse or not SafeHouse.getSafehouseOverlapping then return false end
+    return SafeHouse.getSafehouseOverlapping(wx * 8, wy * 8, wx * 8 + 7, wy * 8 + 7) ~= nil
+end
+
 local function markSeen(key)
     if seenChunks[key] then return end
     if seenChunksCount >= SEEN_CHUNKS_MAX then
@@ -457,7 +462,7 @@ local carryCategories = {
         carryKey = "WDecay_carryTreesNatural",
         placedKey = "WDecay_placedTreesNatural",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
+            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass()) and checkResult.isNatural == true
         end,
         hasExisting = function(square, objects)
             return squareHasSprite(square, WDecay_Trees.getSpritePrefixes(), "tree", objects)
@@ -480,7 +485,7 @@ local carryCategories = {
         carryKey = "WDecay_carryTreesRoad",
         placedKey = "WDecay_placedTreesRoad",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and not checkResult.cleaned
+            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass())
                 and checkResult.isRoad == true and WDecay_Trees.getBasePercentageOnRoad() > 0
         end,
         hasExisting = function(square, objects)
@@ -504,7 +509,7 @@ local carryCategories = {
         carryKey = "WDecay_carryBushesNatural",
         placedKey = "WDecay_placedBushesNatural",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
+            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass()) and checkResult.isNatural == true
         end,
         basePercent = function() return WDecay_Bushes.getBasePercentage() end,
         hasExisting = function(square, objects)
@@ -522,7 +527,7 @@ local carryCategories = {
         carryKey = "WDecay_carryBushesRoad",
         placedKey = "WDecay_placedBushesRoad",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and not checkResult.cleaned
+            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass())
                 and checkResult.isRoad == true and WDecay_Bushes.getBasePercentageOnRoad() > 0
         end,
         basePercent = function() return WDecay_Bushes.getBasePercentageOnRoad() end,
@@ -542,7 +547,7 @@ local carryCategories = {
         placedKey = "WDecay_placedBushesIndoor",
         scanAllLevels = true,
         eligible = function(checkResult, level)
-            if not checkResult or checkResult.cleaned then return false end
+            if not checkResult or (checkResult.cleaned and not WDecay_Scaling.isRedecayPass()) then return false end
             if level ~= 0 then return checkResult.hasRoof == true and checkResult.isIndoor == true end
             return checkResult.isIndoor == true and WDecay_Bushes.getIndoorBasePercentage() > 0
         end,
@@ -562,7 +567,7 @@ local carryCategories = {
         carryKey = "WDecay_carryGrassNatural",
         placedKey = "WDecay_placedGrassNatural",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
+            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass()) and checkResult.isNatural == true
         end,
         basePercent = function() return WDecay_Grass.getBasePercentage() end,
         hasExisting = function(square, objects)
@@ -580,7 +585,7 @@ local carryCategories = {
         carryKey = "WDecay_carryGrassRoad",
         placedKey = "WDecay_placedGrassRoad",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and not checkResult.cleaned
+            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass())
                 and checkResult.isRoad == true and WDecay_Grass.getBasePercentageOnRoad() > 0
         end,
         basePercent = function() return WDecay_Grass.getBasePercentageOnRoad() end,
@@ -600,7 +605,7 @@ local carryCategories = {
         placedKey = "WDecay_placedGrassIndoor",
         scanAllLevels = true,
         eligible = function(checkResult, level)
-            if not checkResult or checkResult.cleaned then return false end
+            if not checkResult or (checkResult.cleaned and not WDecay_Scaling.isRedecayPass()) then return false end
             if level ~= 0 then return checkResult.hasRoof == true and checkResult.isIndoor == true end
             return checkResult.isGoodSquare == true and checkResult.isIndoor == true
                 and WDecay_Grass.getIndoorBasePercentage() > 0
@@ -660,6 +665,7 @@ local function runCarryModifier(fn, square, checkResult, level, name)
 end
 
 local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDays, deadline)
+    WDecay_Scaling.setRedecayContext(doneAtDays)
     local state = chunkWork[key]
     if not state or state.mode ~= "carry" then
         local nowDays = WDecay_Scaling.getWorldAgeDays() or doneAtDays
@@ -685,12 +691,13 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
                 end
             end
         end
-        local doVines = WDecay_Vines_ApplyToSquare ~= nil and WDecay_Features.isEnabled("vines")
+        local urbanRedecay = WDecay_Scaling.isUrbanRedecayEnabled()
+        local doVines = urbanRedecay and WDecay_Vines_ApplyToSquare ~= nil and WDecay_Features.isEnabled("vines")
         local hasUrban = markerData["WDecay_hasUrban"] == true
-        local doWalls = hasUrban and WDecay_Features.isEnabled("walls")
-        local doBarricades = hasUrban and WDecay_Features.isEnabled("barricades")
-        local doFences = hasUrban and WDecay_Features.isEnabled("fences")
-        local doDestroyed = hasUrban and WDecay_Features.isEnabled("destroyedDoorsWindows")
+        local doWalls = urbanRedecay and hasUrban and WDecay_Features.isEnabled("walls")
+        local doBarricades = urbanRedecay and hasUrban and WDecay_Features.isEnabled("barricades")
+        local doFences = urbanRedecay and hasUrban and WDecay_Features.isEnabled("fences")
+        local doDestroyed = urbanRedecay and hasUrban and WDecay_Features.isEnabled("destroyedDoorsWindows")
         local positionsByCat = nil
         if pending then
             positionsByCat = {}
@@ -782,7 +789,10 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
     end
 
     while state.catIndex <= #carryCategories do
-        if deadline and getTimestampMs() >= deadline then return "pending" end
+        if deadline and getTimestampMs() >= deadline then
+            WDecay_Scaling.clearRedecayContext()
+            return "pending"
+        end
         local c = state.catIndex
         local toPlace = state.pending and state.pending[c]
         if toPlace then
@@ -794,7 +804,10 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
                 state.placePlaced = state.markerData[cat.placedKey] or 0
             end
             while state.placeRemaining > 0 and state.placeCount > 0 do
-                if deadline and getTimestampMs() >= deadline then return "pending" end
+                if deadline and getTimestampMs() >= deadline then
+                    WDecay_Scaling.clearRedecayContext()
+                    return "pending"
+                end
                 WDecay_Random.reseedForChunk(state.wx, state.wy, state.doneAtDays + c * 100000 + state.placeRemaining)
                 local randomizer = WDecay_Random.get()
                 local pick = randomizer:random(1, state.placeCount)
@@ -831,6 +844,7 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
     end
     markChunkDone(markerSquare, state.markerData, state.nowDays)
     chunkWork[key] = nil
+    WDecay_Scaling.clearRedecayContext()
     chunkSucceeded(key)
     if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
         WDecay_Debug.totalChunksProcessed = WDecay_Debug.totalChunksProcessed + 1
@@ -839,6 +853,14 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
 end
 
 local function processChunkSquares(chunk, key, deadline)
+    local activeState = chunkWork[key]
+    local wx = activeState and activeState.wx or chunk.wx
+    local wy = activeState and activeState.wy or chunk.wy
+    if wx ~= nil and wy ~= nil and isSafehouseChunk(wx, wy) then
+        chunkWork[key] = nil
+        WDecay_Scaling.clearRedecayContext()
+        return "protected"
+    end
     local state = chunkWork[key]
     if not state then
         local minLevel = chunk:getMinLevel()
@@ -998,7 +1020,8 @@ local function ScanChunksAroundPos(worldX, worldY, radius)
     for wx = cx0, cx1 do
         for wy = cy0, cy1 do
             local key = GenerateKey(wx, wy)
-            if pendingChunks[key] or isChunkInFailCooldown(key) then
+            if isSafehouseChunk(wx, wy) then
+            elseif pendingChunks[key] or isChunkInFailCooldown(key) then
             elseif seenChunks[key] and redecayEnabled then
                 local sq = getSquare(wx * 8, wy * 8, 0)
                 if sq and isChunkMarkedDone(sq) and needsRedecay(sq, scanDays) then
@@ -1043,6 +1066,7 @@ local function queueChunk(chunk)
         end
     end
 
+    if isSafehouseChunk(wx, wy) then return end
     local key = GenerateKey(wx, wy)
     if seenChunks[key] or pendingChunks[key] or isChunkInFailCooldown(key) then return end
 
@@ -1157,7 +1181,7 @@ local function runQueuedChunk(chunk, key, wx, wy, lowPriority, deadline)
         requeueChunkWork(chunk, key, wx, wy, lowPriority)
     else
         pendingChunks[key] = nil
-        if WDecay_DebugCountChunk then WDecay_DebugCountChunk(result == true) end
+        if result ~= "protected" and WDecay_DebugCountChunk then WDecay_DebugCountChunk(result == true) end
         if result then markSeen(key) end
     end
 end
@@ -1395,8 +1419,8 @@ function WDecay_Dispatcher_IsQueueIdle()
     return chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow
 end
 
-local function forEachChunkAround(radius, fn)
-    local player = getSpecificPlayer(0)
+local function forEachChunkAround(radius, fn, player)
+    player = player or getSpecificPlayer(0)
     if not player then return end
 
     local px = math.floor(player:getX())
@@ -1416,7 +1440,7 @@ local function forEachChunkAround(radius, fn)
     end
 end
 
-function WDecay_Dispatcher_QueueArea(radius, wipeMarkers)
+function WDecay_Dispatcher_QueueArea(radius, wipeMarkers, player)
     ensureOnTickRegistered()
     radius = radius or 3
     local queued = 0
@@ -1429,6 +1453,7 @@ function WDecay_Dispatcher_QueueArea(radius, wipeMarkers)
     end
 
     forEachChunkAround(radius, function(chunk, wx, wy)
+        if isSafehouseChunk(wx, wy) then return end
         local key = GenerateKey(wx, wy)
         if seenChunks[key] then
             seenChunks[key] = nil
@@ -1487,12 +1512,12 @@ function WDecay_Dispatcher_QueueArea(radius, wipeMarkers)
         end
 
         queued = queued + 1
-    end)
+    end, player)
     print("[WDecay] Debug: queued " .. queued .. " chunks (radius=" .. radius .. ", wipeMarkers=" .. tostring(wipeMarkers == true) .. ")")
     return queued
 end
 
-function WDecay_Dispatcher_StampDoneAt(radius, days)
+function WDecay_Dispatcher_StampDoneAt(radius, days, player)
     radius = radius or 3
     days = math.floor(tonumber(days) or 0)
     local stamped = 0
@@ -1506,7 +1531,7 @@ function WDecay_Dispatcher_StampDoneAt(radius, days)
                 stamped = stamped + 1
             end
         end
-    end)
+    end, player)
     print("[WDecay] Debug: stamped " .. stamped .. " chunks doneAtDays=" .. days)
     return stamped
 end

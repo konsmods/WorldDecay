@@ -154,6 +154,14 @@ option WDecay.redecayEnabled
 	translation = WDecay_redecayEnabled,
 }
 
+option WDecay.redecayUrbanEnabled
+{
+	type = boolean,
+	default = false,
+	page = WDecay_TimeScaling,
+	translation = WDecay_redecayUrbanEnabled,
+}
+
 option WDecay.redecayThresholdDays
 {
 	type = integer,

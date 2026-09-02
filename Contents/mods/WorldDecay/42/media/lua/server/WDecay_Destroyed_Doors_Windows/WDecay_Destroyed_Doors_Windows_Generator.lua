@@ -37,7 +37,7 @@ local function LoadGridsquare(square, checkResult, level)
 
     if not checkResult then return end
 
-    if checkResult.cleaned then return end
+    if checkResult.cleaned and not WDecay_Scaling.isRedecayPass() then return end
 
     local doorWindowObject = nil
     
@@ -47,7 +47,7 @@ local function LoadGridsquare(square, checkResult, level)
         doorWindowObject = square:getIsoDoor()
     end
 
-    if doorWindowObject and not WDecay_Protection.isPlayerBuilt(doorWindowObject)
+    if doorWindowObject and (not WDecay_Protection.isPlayerBuilt(doorWindowObject) or WDecay_Scaling.isRedecayPass())
         and not doorWindowObject:isBarricaded() then
         if checkResult.hasWindow and WDecay_Scaling.scaleFor('urban', getDestroyedWindowsPercentage()) >= randomizer:random(1, 100) then 
             doorWindowObject:smashWindow(false, false)

@@ -33,7 +33,7 @@ end
 
 local MAX_DEBUG_RADIUS = 100
 
-function WDecay_CleanArea(radius)
+function WDecay_CleanArea(radius, player)
     radius = tonumber(radius) or 3
     if radius < 1 then radius = 1 end
     if radius > MAX_DEBUG_RADIUS then radius = MAX_DEBUG_RADIUS end
@@ -42,7 +42,7 @@ function WDecay_CleanArea(radius)
         return
     end
 
-    local player = getSpecificPlayer(0)
+    player = player or getSpecificPlayer(0)
     if not player then return end
 
     local px = math.floor(player:getX())
@@ -103,7 +103,7 @@ local function stripFloorOverlays(floor)
     end
 end
 
-function WDecay_ReapplyOverlays(radius)
+function WDecay_ReapplyOverlays(radius, player)
     radius = tonumber(radius) or 3
     if radius < 1 then radius = 1 end
     if radius > MAX_DEBUG_RADIUS then radius = MAX_DEBUG_RADIUS end
@@ -111,7 +111,7 @@ function WDecay_ReapplyOverlays(radius)
     local overlays = getTileOverlays()
     if not overlays then return end
 
-    local player = getSpecificPlayer(0)
+    player = player or getSpecificPlayer(0)
     if not player then return end
 
     refreshOverlays()
@@ -135,30 +135,30 @@ function WDecay_ReapplyOverlays(radius)
     print("[WDecay] Debug: overlays reapplied on " .. applied .. " squares")
 end
 
-function WDecay_Regen(radius)
+function WDecay_Regen(radius, player)
     radius = tonumber(radius) or 3
-    WDecay_CleanArea(radius)
+    WDecay_CleanArea(radius, player)
     if WDecay_Dispatcher_QueueArea then
-        WDecay_Dispatcher_QueueArea(radius, true)
+        WDecay_Dispatcher_QueueArea(radius, true, player)
     end
 
-    WDecay_ReapplyOverlays(radius)
+    WDecay_ReapplyOverlays(radius, player)
 end
 
-function WDecay_Redecay(radius)
+function WDecay_Redecay(radius, player)
     radius = tonumber(radius) or 3
     if WDecay_Dispatcher_QueueArea then
-        WDecay_Dispatcher_QueueArea(radius, false)
+        WDecay_Dispatcher_QueueArea(radius, false, player)
     end
 end
 
-function WDecay_RedecayFrom(radius, days)
+function WDecay_RedecayFrom(radius, days, player)
     radius = tonumber(radius) or 3
     if WDecay_Dispatcher_StampDoneAt then
-        WDecay_Dispatcher_StampDoneAt(radius, days or 0)
+        WDecay_Dispatcher_StampDoneAt(radius, days or 0, player)
     end
 
-    WDecay_Redecay(radius)
+    WDecay_Redecay(radius, player)
 end
 
 local timelapse = nil
@@ -191,7 +191,7 @@ local function timelapseTick()
     refreshOverlays()
 
     if WDecay_Dispatcher_QueueArea then
-        WDecay_Dispatcher_QueueArea(timelapse.radius, false)
+        WDecay_Dispatcher_QueueArea(timelapse.radius, false, timelapse.player)
     end
 
     print("[WDecay] Timelapse: age=" .. math.floor(nextAge) .. "d (step " .. timelapse.stepDays .. "d)")
@@ -201,7 +201,7 @@ local function timelapseTick()
     end
 end
 
-function WDecay_Timelapse(stepDays, intervalTicks, targetDays, radius)
+function WDecay_Timelapse(stepDays, intervalTicks, targetDays, radius, player)
     stepDays = tonumber(stepDays) or 7
     if stepDays < 1 then stepDays = 1 end
 
@@ -224,6 +224,7 @@ function WDecay_Timelapse(stepDays, intervalTicks, targetDays, radius)
         intervalTicks = intervalTicks,
         targetDays = targetDays,
         radius = radius,
+        player = player,
         tickCounter = 0
     }
 
@@ -244,11 +245,11 @@ function WDecay_TimelapseStop()
     print("[WDecay] Timelapse stopped")
 end
 
-function WDecay_TimelapseToggle(stepDays, intervalTicks, targetDays, radius)
+function WDecay_TimelapseToggle(stepDays, intervalTicks, targetDays, radius, player)
     if timelapse then
         WDecay_TimelapseStop()
     else
-        WDecay_Timelapse(stepDays, intervalTicks, targetDays, radius)
+        WDecay_Timelapse(stepDays, intervalTicks, targetDays, radius, player)
     end
 end
 

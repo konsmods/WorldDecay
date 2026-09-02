@@ -221,6 +221,24 @@ local function advanceSeasonalDebugMonth()
     print("[WorldDecay Debug] Advanced to month " .. (gameTime:getMonth() + 1) .. "/" .. gameTime:getYear())
 end
 
+local function setSeasonalDebugSeason(season)
+    local months = { spring = 2, summer = 5, autumn = 8, winter = 11 }
+    local month = months[season]
+    if month == nil then return end
+    local gameTime = getGameTime()
+    if not gameTime then return end
+    gameTime:setMonth(month)
+    WDecay_Season.invalidateCache()
+    print("[WorldDecay Debug] Set season to " .. season)
+end
+
+local function printSeasonalClimateInfo()
+    local climate = getClimateManager()
+    if not climate then return end
+    print("[WorldDecay Debug] Season=" .. tostring(climate:getSeasonName())
+        .. " SnowStrength=" .. tostring(climate:getSnowStrength()))
+end
+
 -- Seasonal debug actions originate in the client context menu, but the
 -- vegetation objects are server-owned in both hosted SP and MP. Always route
 -- these actions through OnClientCommand so a dedicated server does the actual
@@ -231,6 +249,18 @@ local function onSeasonalDebugCommand(module, command, player, args)
     end
 
     local action = args.action
+    if action == "season" then
+        setSeasonalDebugSeason(args.season)
+        return
+    elseif action == "climate" then
+        printSeasonalClimateInfo()
+        return
+    elseif action == "reseason" then
+        local names = { trees = "reseasonNearbyTrees", bushes = "reseasonNearbyBushes", grass = "reseasonNearbyGrass", vines = "reseasonNearbyVines" }
+        local fn = names[args.kind] and WD_DebugTools and WD_DebugTools[names[args.kind]]
+        if fn then fn() end
+        return
+    end
     if action == "advanceMonth" then
         advanceSeasonalDebugMonth()
         return
@@ -251,5 +281,28 @@ local function onSeasonalDebugCommand(module, command, player, args)
     end
 end
 
+local function onDebugCommand(module, command, player, args)
+    if module ~= "WDecayDebug" or command ~= "Run" or type(args) ~= "table" then return end
+    local action = args.action
+    if action == "season" then setSeasonalDebugSeason(args.season)
+    elseif action == "advanceMonth" then advanceSeasonalDebugMonth()
+    elseif action == "climate" then printSeasonalClimateInfo()
+    elseif action == "reseason" then
+        local names = { trees = "reseasonNearbyTrees", bushes = "reseasonNearbyBushes", grass = "reseasonNearbyGrass", vines = "reseasonNearbyVines" }
+        local fn = names[args.kind] and WD_DebugTools and WD_DebugTools[names[args.kind]]
+        if fn then fn() end
+    elseif action == "status" and WDecay_Status then WDecay_Status()
+    elseif action == "setDays" and WDecay_SetDays then WDecay_SetDays(args.days)
+    elseif action == "clearDays" and WDecay_ClearDays then WDecay_ClearDays()
+    elseif action == "addDays" and WDecay_AddDays then WDecay_AddDays(args.days)
+    elseif action == "regen" and WDecay_Regen then WDecay_Regen(args.radius, player)
+    elseif action == "redecay" and WDecay_Redecay then WDecay_Redecay(args.radius, player)
+    elseif action == "clean" and WDecay_CleanArea then WDecay_CleanArea(args.radius, player)
+    elseif action == "overlays" and WDecay_ReapplyOverlays then WDecay_ReapplyOverlays(args.radius, player)
+    elseif action == "timelapse" and WDecay_TimelapseToggle then WDecay_TimelapseToggle(args.step, args.ticks, args.target, args.radius, player)
+    end
+end
+
 Events.OnClientCommand.Add(onCleanVegCommand)
 Events.OnClientCommand.Add(onSeasonalDebugCommand)
+Events.OnClientCommand.Add(onDebugCommand)

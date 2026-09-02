@@ -74,6 +74,8 @@
     "Sandbox_WDecay_Divider_TS_Redecay_tooltip": "Cosmetic section divider. Does nothing.",
     "Sandbox_WDecay_redecayEnabled": "Enable Incremental Re-Decay",
     "Sandbox_WDecay_redecayEnabled_tooltip": "If enabled, chunks processed long ago receive additional decay passes as the world ages, applying only the percentage gained since the last pass. Without this, decay is applied once per chunk forever.",
+    "Sandbox_WDecay_redecayUrbanEnabled": "Re-Decay Urban Structures",
+    "Sandbox_WDecay_redecayUrbanEnabled_tooltip": "If enabled, re-decay also repeats walls, fences, doors, windows, barricades, and vines. If disabled, re-decay only adds vegetation.",
     "Sandbox_WDecay_redecayThresholdDays": "Re-Decay Interval (days)",
     "Sandbox_WDecay_redecayThresholdDays_tooltip": "Minimum in-game days between decay passes on the same chunk.",
     "Sandbox_WDecay_Divider_TS_Severity": "--- SEVERITY ---",

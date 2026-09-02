@@ -1,5 +1,3 @@
-local WDecay_Season = require('wdecay_season/wdecay_season')
-
 local FALLBACK_FLAGS = {
     FLAG_GENERATE_SQUARE = 1,
     FLAG_PRINT_CHECKRESULT = 2,
@@ -18,12 +16,6 @@ local PRINT_METRIC = "Metric Info"
 local START_BENCHMARK = "Start Benchmark"
 local SPAWN_TREE = "Spawn Tree (Debug)"
 local REMOVE_DEBUG_TREES = "Remove Debug Trees Here"
-local ADVANCE_MONTH = "Advance Month (+1)"
-local PRINT_CLIMATE_INFO = "Print Climate Info"
-local FORCE_RESEASON = "Force Reseason Nearby Trees"
-local FORCE_RESEASON_BUSHES = "Force Reseason Nearby Bushes"
-local FORCE_RESEASON_GRASS = "Force Reseason Nearby Grass"
-local FORCE_RESEASON_VINES = "Force Reseason Nearby Vines"
 
 -- Lets us right-click a tile and spawn any vanilla tree species/size/season
 -- preview via IsoTree.new()+AddTileObject(), for visually spot-checking the
@@ -138,65 +130,6 @@ end
 -- waiting in real time. The month change is authoritative on the server; use
 -- one of the Force Reseason actions (or wait for the next seasonal tick) to
 -- update already-existing vegetation immediately.
-local function sendSeasonalDebugCommand(playerId, action)
-    local player = getSpecificPlayer and getSpecificPlayer(playerId or 0)
-    if sendClientCommand and player then
-        sendClientCommand(player, "WDecaySeasonalDebug", "Run", { action = action })
-        return true
-    end
-
-    return false
-end
-
-local function onAdvanceMonth(worldobjects, playerId)
-    if not sendSeasonalDebugCommand(playerId, "advanceMonth") then
-        print("[WorldDecay Debug] Seasonal debug command unavailable")
-    end
-end
-
-local function onPrintClimateInfo()
-    local climate = getClimateManager()
-    if not climate then
-        print("[WorldDecay Debug] getClimateManager() returned nil")
-        return
-    end
-
-    local rawSeasonName = climate:getSeasonName()
-    local seasonName = WDecay_Season.getSeasonName()
-    local snowStrength = climate:getSnowStrength()
-    local seasonValue = WDecay_Season.getSeasonValue()
-    local childSlot = seasonValue and seasonValue ~= 0 and (seasonValue + 1) or nil
-    print("[WorldDecay Debug] Season=" .. tostring(rawSeasonName)
-        .. " normalized=" .. tostring(seasonName)
-        .. " SnowStrength=" .. tostring(snowStrength)
-        .. " (isSnowing=" .. tostring(snowStrength ~= nil and snowStrength > 0) .. ")"
-        .. " -> childSlot=" .. tostring(childSlot) .. (childSlot == nil and " (bare/winter)" or ""))
-end
-
-local function onForceReseason(worldobjects, playerId)
-    if not sendSeasonalDebugCommand(playerId, "trees") then
-        print("[WorldDecay Debug] Seasonal debug command unavailable")
-    end
-end
-
-local function onForceReseasonBushes(worldobjects, playerId)
-    if not sendSeasonalDebugCommand(playerId, "bushes") then
-        print("[WorldDecay Debug] Seasonal debug command unavailable")
-    end
-end
-
-local function onForceReseasonGrass(worldobjects, playerId)
-    if not sendSeasonalDebugCommand(playerId, "grass") then
-        print("[WorldDecay Debug] Seasonal debug command unavailable")
-    end
-end
-
-local function onForceReseasonVines(worldobjects, playerId)
-    if not sendSeasonalDebugCommand(playerId, "vines") then
-        print("[WorldDecay Debug] Seasonal debug command unavailable")
-    end
-end
-
 local function onRemoveDebugTrees(worldobjects, square, playerId)
     if not square then return end
 
@@ -230,12 +163,6 @@ local function addSquareGenCheck(player, context, worldobjects)
             local subMenuOption = context:addOption(DEBUG_TOOLS)
             local subMenu = ISContextMenu:getNew(context)
             context:addSubMenu(subMenuOption, subMenu)
-            subMenu:addOption(ADVANCE_MONTH, worldobjects, onAdvanceMonth, player)
-            subMenu:addOption(PRINT_CLIMATE_INFO, worldobjects, onPrintClimateInfo)
-            subMenu:addOption(FORCE_RESEASON, worldobjects, onForceReseason, player)
-            subMenu:addOption(FORCE_RESEASON_BUSHES, worldobjects, onForceReseasonBushes, player)
-            subMenu:addOption(FORCE_RESEASON_GRASS, worldobjects, onForceReseasonGrass, player)
-            subMenu:addOption(FORCE_RESEASON_VINES, worldobjects, onForceReseasonVines, player)
             subMenu:addOption(GENERATE_SQUARE, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_GENERATE_SQUARE)
             subMenu:addOption(PRINT_CHECKRESULT, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_PRINT_CHECKRESULT)
             subMenu:addOption(PRINT_OBJECT_INFO, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_PRINT_OBJECT_INFO)

@@ -6,6 +6,7 @@ local cfg = nil
 local cachedMultipliers = nil
 local redecayDoneAtDays = nil
 local redecayBefore = nil
+local redecayPass = false
 local debugAgeDays = nil
 
 local function readConfig()
@@ -35,6 +36,7 @@ local function readConfig()
     c.urbanFactor = getOpt('WDecay.timeScalingUrbanFactor', 60)
     c.vehiclesFactor = getOpt('WDecay.timeScalingVehiclesFactor', 100)
     c.redecayEnabled = getOpt('WDecay.redecayEnabled', false)
+    c.redecayUrbanEnabled = getOpt('WDecay.redecayUrbanEnabled', false)
     c.redecayThresholdDays = getOpt('WDecay.redecayThresholdDays', 180)
     c.severityScaling = getOpt('WDecay.severityScalingEnabled', false)
     c.seasonalBias = getOpt('WDecay.seasonalBiasEnabled', false)
@@ -250,6 +252,15 @@ function WDecay_Scaling.isRedecayEnabled()
     return c ~= nil and c.redecayEnabled == true
 end
 
+function WDecay_Scaling.isUrbanRedecayEnabled()
+    local c = getConfig()
+    return c ~= nil and c.redecayUrbanEnabled == true
+end
+
+function WDecay_Scaling.isRedecayPass()
+    return redecayPass
+end
+
 function WDecay_Scaling.isTimeScalingEnabled()
     local c = getConfig()
     return c ~= nil and c.enabled == true
@@ -269,6 +280,7 @@ end
 
 function WDecay_Scaling.setRedecayContext(doneAtDays)
     redecayDoneAtDays = doneAtDays
+    redecayPass = doneAtDays ~= nil
     if doneAtDays ~= nil then
         if WDecay_Scaling.isTimeScalingEnabled() then
             redecayBefore = computeMultipliersForDays(doneAtDays)
@@ -283,6 +295,7 @@ end
 function WDecay_Scaling.clearRedecayContext()
     redecayDoneAtDays = nil
     redecayBefore = nil
+    redecayPass = false
 end
 
 function WDecay_Scaling.getSeasonFactor(kind)

@@ -56,7 +56,7 @@ local function LoadGridsquare(square, checkResult, level)
 
     if not checkResult then return end
 
-    if checkResult.cleaned then return end
+    if checkResult.cleaned and not WDecay_Scaling.isRedecayPass() then return end
 
     if not checkResult.hasWindow and not checkResult.hasDoor then return end
 
@@ -70,7 +70,7 @@ local function LoadGridsquare(square, checkResult, level)
         barricadeAble = square:getIsoDoor()
     end
 
-    if barricadeAble and not WDecay_Protection.isPlayerBuilt(barricadeAble) then
+    if barricadeAble and (not WDecay_Protection.isPlayerBuilt(barricadeAble) or WDecay_Scaling.isRedecayPass()) then
         if not barricadeAble:isBarricaded() then
             if barricadeAble:isBarricadeAllowed() then
                 local randNumber = randomizer:random(1, 100)

@@ -1,4 +1,5 @@
 local WDecay_Placement = {}
+local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 
 local clusterOptions = {
     tree = 'WDecay.treeClusteringEnabled',
@@ -48,7 +49,7 @@ function WDecay_Placement.isSafe(square)
         if object then
             if hasContainer(object) then return false end
             local modData = object:getModData()
-            if modData and modData["WDecay_Cleanable"] then return false end
+            if modData and modData["WDecay_Cleanable"] and not WDecay_Scaling.isRedecayPass() then return false end
         end
     end
     return true
