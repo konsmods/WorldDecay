@@ -12,6 +12,12 @@ local REMOVABLE_MARKER_TYPES = {
     indoorGrass = true
 }
 
+local function markCleaned(square)
+    square:getModData()["WDecay_cleaned"] = true
+    square:transmitModdata()
+    square:flagForHotSave()
+end
+
 local function hasContainer(object)
     local container = nil
 
@@ -145,7 +151,7 @@ function WDecay_CleanSquare(square)
         end
     end
 
-    square:getModData()["WDecay_cleaned"] = true
+    markCleaned(square)
     square:setOverlayDone(true)
     square:RecalcAllWithNeighbours(true)
 

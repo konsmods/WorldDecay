@@ -15,6 +15,12 @@ end
 local IS_CAN_BE_CUT = IsoFlagType.canBeCut
 local IS_CAN_BE_REMOVED = IsoFlagType.canBeRemoved
 
+local function markCleaned(square)
+    square:getModData()["WDecay_cleaned"] = true
+    square:transmitModdata()
+    square:flagForHotSave()
+end
+
 local function cleanLog(msg)
     if isCleanDebug() then
         print("[WDecay-Clean] " .. msg)
@@ -121,6 +127,7 @@ local function removeUpperVine(square)
             and WDecay_CleanVegetation.isWallVineObject(object) then
             if not hasContainer(object) then
                 upper:transmitRemoveItemFromSquare(object)
+                markCleaned(upper)
             end
 
             return
@@ -236,7 +243,7 @@ local function onRemovePlantCommand(module, command, player, args)
     end
 
     if removeUniqueTagged(square, command) then
-        square:getModData()["WDecay_cleaned"] = true
+        markCleaned(square)
     end
 end
 

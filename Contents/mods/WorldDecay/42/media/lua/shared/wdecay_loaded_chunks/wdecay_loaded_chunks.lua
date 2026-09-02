@@ -8,6 +8,15 @@ local DEFAULT_RADIUS_CHUNKS = 15
 local PROBE_MIN_LEVEL = -2
 local PROBE_MAX_LEVEL = 7
 
+function WDecay_LoadedChunks.getMarkerSquare(chunk)
+    if not chunk then return nil end
+    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
+        local square = chunk:getGridSquare(0, 0, z)
+        if square and square:getChunk() then return square end
+    end
+    return nil
+end
+
 local function getRadiusChunks()
     local sandbox = getSandboxOptions and getSandboxOptions()
     local option = sandbox and sandbox:getOptionByName('WDecay.scanRadius')

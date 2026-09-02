@@ -1,6 +1,7 @@
 local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_Protection = require('wdecay_protection/wdecay_protection')
 
 local randomizer = WDecay_Random.get()
 
@@ -69,7 +70,7 @@ local function LoadGridsquare(square, checkResult, level)
         barricadeAble = square:getIsoDoor()
     end
 
-    if barricadeAble then
+    if barricadeAble and not WDecay_Protection.isPlayerBuilt(barricadeAble) then
         if not barricadeAble:isBarricaded() then
             if barricadeAble:isBarricadeAllowed() then
                 local randNumber = randomizer:random(1, 100)

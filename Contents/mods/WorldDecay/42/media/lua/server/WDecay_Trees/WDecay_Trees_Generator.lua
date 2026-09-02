@@ -24,7 +24,8 @@ local function LoadGridsquare(square, checkResult, level)
 
     local percentage = isRoad and WDecay_Trees.getBasePercentageOnRoad() or WDecay_Trees.getBasePercentage()
 
-    if WDecay_Scaling.scaleFor('nature', percentage) >= randomizer:random(1, 100) then
+    local chance = WDecay_Placement.clusterChance(square, "tree", WDecay_Scaling.scaleFor('nature', percentage), 6)
+    if chance >= randomizer:random(1, 100) then
         if not WDecay_Placement.isSafe(square) then return false end
         local baseSprite, childSprite = WDecay_Trees.pickTreeSprites()
         local tree = WDecay_Placement.createTaggedObject(square, baseSprite, "tree")

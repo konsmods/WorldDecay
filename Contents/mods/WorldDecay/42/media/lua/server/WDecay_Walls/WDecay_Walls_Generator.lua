@@ -1,6 +1,7 @@
 local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_Protection = require('wdecay_protection/wdecay_protection')
 
 local TIME_KEY = "WDecay_Walls-LoadGridsquare"
 
@@ -52,7 +53,8 @@ local function LoadGridsquare(square, checkResult, level)
                 local textureName = obj:getTextureName()
 
                 if textureName and
-                    (WDecay_Walls.isExteriorWall(textureName) or WDecay_Walls.isInteriorWall(textureName)) then
+                    (WDecay_Walls.isExteriorWall(textureName) or WDecay_Walls.isInteriorWall(textureName))
+                    and not WDecay_Protection.isPlayerBuilt(obj) then
                     if wallPercentage >= randomizer:random(1, 100) then
                         local properties = sprite:getProperties()
                         if properties then

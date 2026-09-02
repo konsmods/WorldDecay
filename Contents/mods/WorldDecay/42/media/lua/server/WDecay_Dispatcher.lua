@@ -389,6 +389,18 @@ local cachedSquareCheck = WDecay_SquareCheck.checkAll
 
 local getMarkerSquare = WDecay_LoadedChunks.getMarkerSquare
 
+local function saveMarker(square)
+    if not square then return end
+    square:transmitModdata()
+    square:flagForHotSave()
+end
+
+local function markChunkDone(square, data, days)
+    data["WDecay_done"] = CACHE_VERSION
+    if days then data["WDecay_doneAtDays"] = math.floor(days) end
+    saveMarker(square)
+end
+
 local function isChunkMarkedDone(square)
     return square ~= nil and square:getModData()["WDecay_done"] == CACHE_VERSION
 end
@@ -817,8 +829,7 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
         local eligibleValue = state.finalElig[c]
         if eligibleValue ~= nil then state.markerData[cat.eligKey] = eligibleValue end
     end
-    if state.nowDays then state.markerData["WDecay_doneAtDays"] = math.floor(state.nowDays) end
-    state.markerData["WDecay_done"] = CACHE_VERSION
+    markChunkDone(markerSquare, state.markerData, state.nowDays)
     chunkWork[key] = nil
     chunkSucceeded(key)
     if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
@@ -832,14 +843,7 @@ local function processChunkSquares(chunk, key, deadline)
     if not state then
         local minLevel = chunk:getMinLevel()
         local maxLevel = chunk:getMaxLevel()
-        local markerSquare = nil
-        local z = minLevel
-        while z <= maxLevel do
-            markerSquare = chunk:getGridSquare(0, 0, z)
-            if markerSquare and markerSquare:getChunk() then break end
-            markerSquare = nil
-            z = z + 1
-        end
+        local markerSquare = getMarkerSquare(chunk)
         if not markerSquare then
             return chunkFailedTransiently(key)
         end
@@ -867,7 +871,7 @@ local function processChunkSquares(chunk, key, deadline)
             x = 0,
             wx = math.floor(markerSquare:getX() / 8),
             wy = math.floor(markerSquare:getY() / 8),
-            markerZ = z,
+            markerZ = markerSquare:getZ(),
             markerData = markerData,
             startedAt = DEBUG_MODE and getTimestampMs() or 0
         }
@@ -927,9 +931,8 @@ local function processChunkSquares(chunk, key, deadline)
         chunkWork[key] = nil
         return false
     end
-    state.markerData["WDecay_done"] = CACHE_VERSION
     local nowDays = WDecay_Scaling.getWorldAgeDays()
-    if nowDays then state.markerData["WDecay_doneAtDays"] = math.floor(nowDays) end
+    markChunkDone(getMarkerSquare(chunk), state.markerData, nowDays)
     chunkWork[key] = nil
     chunkSucceeded(key)
     if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
@@ -1470,6 +1473,7 @@ function WDecay_Dispatcher_QueueArea(radius, wipeMarkers)
                 markerData["WDecay_eligGrassIndoor"] = nil
                 markerData["WDecay_carryGrassIndoor"] = nil
                 markerData["WDecay_placedGrassIndoor"] = nil
+                saveMarker(markerSquare)
             end
         end
 
@@ -1498,6 +1502,7 @@ function WDecay_Dispatcher_StampDoneAt(radius, days)
             local markerData = markerSquare:getModData()
             if markerData["WDecay_done"] == CACHE_VERSION then
                 markerData["WDecay_doneAtDays"] = days
+                saveMarker(markerSquare)
                 stamped = stamped + 1
             end
         end

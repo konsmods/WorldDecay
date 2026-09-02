@@ -1,3 +1,13 @@
+[h1]2.1.7[/h1]
+[list]
+[*]Added simple clustering for trees, bushes, and grass objects, with separate sandbox toggles and boost controls.
+[*]Rebalanced vegetation and overlay density defaults, including lower grass-object road density.
+[*]Fixed cleaned vegetation returning after reloads and protected cleaned squares from overlays.
+[*]Fixed completed chunks being processed again after streaming or reloads when re-decay is disabled.
+[*]Protected player-built walls, doors, windows, fences, barricades, and furniture from structural decay and vines.
+[*]Restored shared chunk-marker lookup and simplified marker persistence.
+[/list]
+
 [h1]2.1.6[/h1]
 [list]
 [*]Fixed [VehicleRetexture] versioning

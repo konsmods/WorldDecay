@@ -279,6 +279,8 @@ end
 -- else.
 function WDecay_Overlays_ReconcileSquare(square, checkResult, level)
     if not WDecay_Features.isEnabled("overlays") then return end
+    if checkResult and checkResult.cleaned then return end
+    if square:getModData()["WDecay_cleaned"] then return end
     local floor = square:getFloor()
     if not floor then return end
 

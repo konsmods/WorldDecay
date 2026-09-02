@@ -4,6 +4,7 @@ local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 local WDecay_CleanVegetation = require('wdecay_cleanvegetation/wdecay_cleanvegetation')
 local WDecay_Vines = require('WDecay_Vines/WDecay_Vines')
 local WDecay_Vines_SpriteRules = require('WDecay_Vines/WDecay_Vines_SpriteRules')
+local WDecay_Protection = require('wdecay_protection/wdecay_protection')
 local PROP_FENCE_LOW = IsoPropertyType.lookup("FenceTypeLow")
 local PROP_WALL_NW = IsoPropertyType.lookup("WallNW"); local PROP_ATTACHED_NW = IsoPropertyType.lookup("attachedNW")
 local PROP_WALL_W = IsoPropertyType.lookup("WallW"); local PROP_WINDOW_W = IsoPropertyType.lookup("WindowW")
@@ -54,6 +55,7 @@ local function squareHasBlacklistedSprite(objs)
 end
 local function createVine(square,obj,isLow,objs)
     if not square or not obj then return end
+    if WDecay_Protection.isPlayerBuilt(obj) then return end
     if squareHasVine(square,objs) then return end
     local sprN=obj:getSpriteName()
     if WDecay_Vines_SpriteRules.matches(sprN, WDecay_Vines_SpriteRules.skip) then return end

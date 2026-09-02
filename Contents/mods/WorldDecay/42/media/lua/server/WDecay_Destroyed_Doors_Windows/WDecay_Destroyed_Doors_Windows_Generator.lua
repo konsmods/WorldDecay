@@ -1,6 +1,7 @@
 local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_Protection = require('wdecay_protection/wdecay_protection')
 
 local TIME_KEY = "WDecay_Destroyed_Doors_Windows-LoadGridsquare"
 
@@ -46,7 +47,8 @@ local function LoadGridsquare(square, checkResult, level)
         doorWindowObject = square:getIsoDoor()
     end
 
-    if doorWindowObject and not doorWindowObject:isBarricaded() then
+    if doorWindowObject and not WDecay_Protection.isPlayerBuilt(doorWindowObject)
+        and not doorWindowObject:isBarricaded() then
         if checkResult.hasWindow and WDecay_Scaling.scaleFor('urban', getDestroyedWindowsPercentage()) >= randomizer:random(1, 100) then 
             doorWindowObject:smashWindow(false, false)
         elseif checkResult.hasDoor and WDecay_Scaling.scaleFor('urban', getDestroyedDoorsPercentage()) >= randomizer:random(1, 100) and not checkResult.hasWindow then
@@ -83,3 +85,4 @@ function WDecay_Destroyed_ApplyToSquare(square, checkResult, level)
 end
 
 Events.EveryDays.Add(resetCaches)
+Events.OnGameStart.Add(WDecay_Protection.protectRepairedWindows)
