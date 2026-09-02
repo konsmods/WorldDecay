@@ -97,6 +97,20 @@ function WDecay_Placement.createTaggedObject(square, spriteName, cleanableType)
     if not square or not spriteName or not cleanableType then return nil end
     local objects = square:getObjects()
     if not objects then return nil end
+
+    if cleanableType == "tree" then
+        local sprite = getSprite(spriteName)
+        if not sprite then return nil end
+        local tree = IsoTree.new(square, sprite)
+        if not tree then return nil end
+        square:AddSpecialObject(tree)
+        tree:setAttachedAnimSprite(ArrayList.new())
+        tree:getModData()["WDecay_Cleanable"] = cleanableType
+        tree:transmitCompleteItemToClients()
+        tree:transmitModData()
+        return tree
+    end
+
     local existing = {}
     for i = 0, objects:size() - 1 do existing[objects:get(i)] = true end
     local ok = pcall(function() createTile(spriteName, square) end)
@@ -113,6 +127,8 @@ function WDecay_Placement.createTaggedObject(square, spriteName, cleanableType)
     end
     if not created then return nil end
     created:getModData()["WDecay_Cleanable"] = cleanableType
+    created:transmitCompleteItemToClients()
+    created:transmitModData()
     return created
 end
 

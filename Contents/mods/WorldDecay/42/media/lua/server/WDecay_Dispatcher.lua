@@ -474,6 +474,8 @@ local carryCategories = {
             local tree = WDecay_Placement.createTaggedObject(square, baseSprite, "tree")
             if tree and childSprite and getSprite(childSprite) then
                 tree:addAttachedAnimSpriteByName(childSprite)
+                tree:transmitCompleteItemToClients()
+                tree:transmitModData()
             end
             return tree ~= nil
         end,
@@ -498,6 +500,8 @@ local carryCategories = {
             local tree = WDecay_Placement.createTaggedObject(square, baseSprite, "tree")
             if tree and childSprite and getSprite(childSprite) then
                 tree:addAttachedAnimSpriteByName(childSprite)
+                tree:transmitCompleteItemToClients()
+                tree:transmitModData()
             end
             return tree ~= nil
         end,

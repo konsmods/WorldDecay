@@ -1,4 +1,9 @@
-[h1]2.1.8 Pending[/h1]
+[h1]2.1.9 Pending[/h1]
+[list]
+[*]Fixed MP transmission for spawned vegetation and switched generated trees to vanilla-style IsoTree objects.
+[/list]
+
+[h1]2.1.8[/h1]
 [list]
 [*]Added a resizable debug panel with General and Seasonal tabs.
 [*]Moved seasonal debug actions into the panel and wired them for SP and MP.
