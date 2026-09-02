@@ -6,6 +6,7 @@
 [*]Added safehouse protection for chunk processing and optional structural re-decay outside safehouses.
 [*]Kept vegetation re-decay separate from walls, windows, roofs, barricades, and other structural decay.
 [*]Improved player-positioned debug sweeps and re-decay context handling.
+[*]Replaced the VehicleRetexture implementation with WorldDecay_MossyRustTextures and simplified it to texture-only rust replacements for compatibility.
 [/list]
 
 [h1]2.1.7[/h1]
