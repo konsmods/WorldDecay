@@ -263,6 +263,7 @@ local function registerLateLazyOverlay(square, floor, level, checkResult)
         if overlays then
             overlays:updateTileOverlaySprite(floor)
             floor:transmitUpdatedSpriteToClients()
+            if WDecay_DebugCountTransmission then WDecay_DebugCountTransmission("overlay") end
         end
     end
 end
@@ -288,6 +289,7 @@ function WDecay_Overlays_ReconcileSquare(square, checkResult, level)
     if floorData and floorData["WDecay_OverlayApplied"] then
         if dedupeFloorOverlays(floor) > 0 then
             floor:transmitUpdatedSpriteToClients()
+            if WDecay_DebugCountTransmission then WDecay_DebugCountTransmission("overlay") end
         end
     else
         registerLateLazyOverlay(square, floor, level, checkResult)

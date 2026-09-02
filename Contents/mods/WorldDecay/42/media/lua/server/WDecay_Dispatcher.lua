@@ -351,18 +351,12 @@ end
 
 local function snapshotObjects(square)
     local existing = {}
-    local objects = square:getObjects()
-    if objects then
-        for i = 0, objects:size() - 1 do existing[objects:get(i)] = true end
-    end
+    WDecay_Placement.forEachObject(square, function(object) existing[object] = true end)
     return existing
 end
 
 local function recordNewPlacements(markerData, square, checkResult, existing)
-    local objects = square:getObjects()
-    if not objects then return end
-    for i = 0, objects:size() - 1 do
-        local object = objects:get(i)
+    WDecay_Placement.forEachObject(square, function(object)
         if object and not existing[object] then
             local modData = object:getModData()
             local cleanableType = modData and modData["WDecay_Cleanable"]
@@ -384,7 +378,7 @@ local function recordNewPlacements(markerData, square, checkResult, existing)
             end
             if key then markerData[key] = (markerData[key] or 0) + 1 end
         end
-    end
+    end)
 end
 
 local WDecay_SquareCheck = require('wdecay_squarecheck/wdecay_squarecheck')
@@ -429,29 +423,26 @@ local function needsRedecay(square, cachedDays)
 end
 
 local function squareHasSprite(square, prefixes, cleanableType, objects)
-    objects = objects or square:getObjects()
-    if not objects then return false end
-
-    for i = 0, objects:size() - 1 do
-        local obj = objects:get(i)
+    local found = false
+    WDecay_Placement.forEachObject(square, function(obj)
         if obj then
             local modData = obj:getModData()
             if modData and cleanableType and modData["WDecay_Cleanable"] == cleanableType then
-                return true
+                found = true
             end
 
             local spriteName = obj:getSpriteName()
-            if spriteName then
+            if not found and spriteName then
                 for p = 1, #prefixes do
                     if luautils.stringStarts(spriteName, prefixes[p]) then
-                        return true
+                        found = true
+                        break
                     end
                 end
             end
         end
-    end
-
-    return false
+    end)
+    return found
 end
 
 local carryCategories = {
@@ -474,10 +465,8 @@ local carryCategories = {
             local tree = WDecay_Placement.createTaggedObject(square, baseSprite, "tree")
             if tree and childSprite and getSprite(childSprite) then
                 tree:addAttachedAnimSpriteByName(childSprite)
-                tree:transmitCompleteItemToClients()
-                tree:transmitModData()
             end
-            return tree ~= nil
+            return WDecay_Placement.finalizeObject(tree) ~= nil
         end,
     },
     {
@@ -500,10 +489,8 @@ local carryCategories = {
             local tree = WDecay_Placement.createTaggedObject(square, baseSprite, "tree")
             if tree and childSprite and getSprite(childSprite) then
                 tree:addAttachedAnimSpriteByName(childSprite)
-                tree:transmitCompleteItemToClients()
-                tree:transmitModData()
             end
-            return tree ~= nil
+            return WDecay_Placement.finalizeObject(tree) ~= nil
         end,
     },
     {
@@ -853,6 +840,7 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
     if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
         WDecay_Debug.totalChunksProcessed = WDecay_Debug.totalChunksProcessed + 1
     end
+    if WDecay_DebugCountPass then WDecay_DebugCountPass("redecay") end
     return true
 end
 
@@ -967,6 +955,7 @@ local function processChunkSquares(chunk, key, deadline)
     if DEBUG_MODE and WDecay_Debug and WDecay_Debug.totalChunkTimeMs then
         WDecay_Debug.totalChunkTimeMs = WDecay_Debug.totalChunkTimeMs + getTimestampMs() - state.startedAt
     end
+    if WDecay_DebugCountPass then WDecay_DebugCountPass("initial") end
     return true
 end
 

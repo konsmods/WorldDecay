@@ -1,5 +1,6 @@
 -- Scans loaded squares around active players because the loaded-cell list is not Lua-exposed.
 local WDecay_Season = require('wdecay_season/wdecay_season')
+local WDecay_Placement = require('wdecay_placement/wdecay_placement')
 
 local WDecay_LoadedChunks = {}
 
@@ -74,26 +75,54 @@ function WDecay_LoadedChunks.forEachLoadedSquare(fn)
     end
 end
 
--- Registered callbacks share one loaded-square sweep.
 local reseasonCallbacks = {}
 
 function WDecay_LoadedChunks.registerReseasonCallback(fn)
     reseasonCallbacks[#reseasonCallbacks + 1] = fn
 end
 
-local function reseasonAllLoadedChunks()
-    if #reseasonCallbacks == 0 then return 0, 0 end
-
+function WDecay_LoadedChunks.forEachLoadedObject(fn)
     local totalEvaluated, totalChanged = 0, 0
     WDecay_LoadedChunks.forEachLoadedSquare(function(square)
-        for i = 1, #reseasonCallbacks do
-            local evaluated, changed = reseasonCallbacks[i](square)
-            totalEvaluated = totalEvaluated + evaluated
-            totalChanged = totalChanged + changed
-        end
+        WDecay_Placement.forEachObject(square, function(object)
+            local evaluated, changed = fn(object)
+            totalEvaluated = totalEvaluated + (evaluated or 0)
+            totalChanged = totalChanged + (changed or 0)
+        end)
     end)
     return totalEvaluated, totalChanged
 end
+
+local function reseasonObject(object)
+    local evaluated, changed = 0, 0
+    for i = 1, #reseasonCallbacks do
+        local objectEvaluated, objectChanged = reseasonCallbacks[i](object)
+        evaluated = evaluated + (objectEvaluated or 0)
+        changed = changed + (objectChanged or 0)
+    end
+    return evaluated, changed
+end
+
+local function reseasonAllLoadedChunks()
+    if #reseasonCallbacks == 0 then return 0, 0 end
+    if WDecay_DebugCountPass then WDecay_DebugCountPass("seasonal") end
+    return WDecay_LoadedChunks.forEachLoadedObject(reseasonObject)
+end
+
+local function reseasonChunk(chunk)
+    if not isServer() or not chunk or #reseasonCallbacks == 0 then return end
+    if WDecay_DebugCountPass then WDecay_DebugCountPass("seasonal") end
+    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
+        for cx = 0, CHUNK_SIZE - 1 do
+            for cy = 0, CHUNK_SIZE - 1 do
+                local square = chunk:getGridSquare(cx, cy, z)
+                WDecay_Placement.forEachObject(square, reseasonObject)
+            end
+        end
+    end
+end
+
+Events.LoadChunk.Add(reseasonChunk)
 
 local lastSeasonValue, lastSnow, firstCheck = nil, nil, true
 

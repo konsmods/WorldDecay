@@ -83,6 +83,7 @@ local function createVine(square,obj,isLow,objs)
     if sn then
         obj:setOverlaySprite(sn, 1.0, 1.0, 1.0, 1.0)
         obj:transmitUpdatedSpriteToClients()
+        if WDecay_DebugCountTransmission then WDecay_DebugCountTransmission("overlay") end
     end
 end
 local function LoadGridsquare(square,checkResult,level)

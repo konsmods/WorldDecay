@@ -38,21 +38,37 @@ local function hasContainer(object)
     return container ~= nil
 end
 
-function WDecay_Placement.isSafe(square)
-    if not square then return false end
-    local specialObjects = square:getSpecialObjects()
-    if specialObjects and specialObjects:size() > 0 then return false end
-    local objects = square:getObjects()
-    if not objects then return false end
-    for i = 0, objects:size() - 1 do
-        local object = objects:get(i)
-        if object then
-            if hasContainer(object) then return false end
-            local modData = object:getModData()
-            if modData and modData["WDecay_Cleanable"] and not WDecay_Scaling.isRedecayPass() then return false end
+function WDecay_Placement.forEachObject(square, fn)
+    if not square or not fn then return end
+    local seen = {}
+    local function scan(objects, special)
+        if not objects then return end
+        for i = 0, objects:size() - 1 do
+            local object = objects:get(i)
+            if object and not seen[object] then
+                seen[object] = true
+                fn(object, special)
+            end
         end
     end
-    return true
+    scan(square:getObjects(), false)
+    scan(square:getSpecialObjects(), true)
+end
+
+function WDecay_Placement.isSafe(square)
+    if not square or not square:getObjects() then return false end
+    local safe = true
+    WDecay_Placement.forEachObject(square, function(object, special)
+        if special or hasContainer(object) then
+            safe = false
+            return
+        end
+        local modData = object:getModData()
+        if modData and modData["WDecay_Cleanable"] and not WDecay_Scaling.isRedecayPass() then
+            safe = false
+        end
+    end)
+    return safe
 end
 
 function WDecay_Placement.clusterChance(square, cleanableType, chance, radius)
@@ -70,33 +86,24 @@ function WDecay_Placement.clusterChance(square, cleanableType, chance, radius)
     local x, y, z = square:getX(), square:getY(), square:getZ()
     radius = math.max(1, math.floor(tonumber(radius) or 1))
     for ox = -radius, radius do
-        for oy = -radius, radius do
-            if ox ~= 0 or oy ~= 0 then
-                local target = cell:getGridSquare(x + ox, y + oy, z)
-                local objects = target and target:getObjects()
-                if objects then
-                    for i = 0, objects:size() - 1 do
-                        local object = objects:get(i)
-                        local modData = object and object:hasModData() and object:getModData()
-                        if modData and modData["WDecay_Cleanable"] == cleanableType then
-                            return math.min(100, chance * getClusterBoost(cleanableType))
-                        end
-                    end
+            for oy = -radius, radius do
+                if ox ~= 0 or oy ~= 0 then
+                    local target = cell:getGridSquare(x + ox, y + oy, z)
+                    local found = false
+                    WDecay_Placement.forEachObject(target, function(object)
+                        local modData = object:hasModData() and object:getModData()
+                        if modData and modData["WDecay_Cleanable"] == cleanableType then found = true end
+                    end)
+                    if found then return math.min(100, chance * getClusterBoost(cleanableType)) end
                 end
             end
         end
-    end
 
     return chance
 end
 
--- Returns the created object (or nil on failure), so callers that need to
--- customize it further (e.g. attach a seasonal crown sprite) can. Use
--- createTagged() below when only the boolean success/fail result is needed.
 function WDecay_Placement.createTaggedObject(square, spriteName, cleanableType)
     if not square or not spriteName or not cleanableType then return nil end
-    local objects = square:getObjects()
-    if not objects then return nil end
 
     if cleanableType == "tree" then
         local sprite = getSprite(spriteName)
@@ -106,34 +113,30 @@ function WDecay_Placement.createTaggedObject(square, spriteName, cleanableType)
         square:AddSpecialObject(tree)
         tree:setAttachedAnimSprite(ArrayList.new())
         tree:getModData()["WDecay_Cleanable"] = cleanableType
-        tree:transmitCompleteItemToClients()
-        tree:transmitModData()
         return tree
     end
 
-    local existing = {}
-    for i = 0, objects:size() - 1 do existing[objects:get(i)] = true end
-    local ok = pcall(function() createTile(spriteName, square) end)
-    if not ok then return nil end
-    objects = square:getObjects()
-    if not objects then return nil end
-    local created = nil
-    for i = 0, objects:size() - 1 do
-        local object = objects:get(i)
-        if object and not existing[object] and object:getSpriteName() == spriteName then
-            if created then return nil end
-            created = object
-        end
-    end
+    if not getSprite(spriteName) then return nil end
+    local created = IsoObject.new(getCell(), square, spriteName)
     if not created then return nil end
+    square:AddSpecialObject(created)
+    created:setAttachedAnimSprite(ArrayList.new())
     created:getModData()["WDecay_Cleanable"] = cleanableType
-    created:transmitCompleteItemToClients()
-    created:transmitModData()
     return created
 end
 
+function WDecay_Placement.finalizeObject(object)
+    if not object then return nil end
+    object:transmitCompleteItemToClients()
+    if WDecay_DebugCountTransmission then WDecay_DebugCountTransmission("complete") end
+    object:transmitModData()
+    if WDecay_DebugCountTransmission then WDecay_DebugCountTransmission("modData") end
+    if WDecay_DebugCountObject then WDecay_DebugCountObject(object:getModData()["WDecay_Cleanable"]) end
+    return object
+end
+
 function WDecay_Placement.createTagged(square, spriteName, cleanableType)
-    return WDecay_Placement.createTaggedObject(square, spriteName, cleanableType) ~= nil
+    return WDecay_Placement.finalizeObject(WDecay_Placement.createTaggedObject(square, spriteName, cleanableType)) ~= nil
 end
 
 return WDecay_Placement

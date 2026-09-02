@@ -139,7 +139,7 @@ function WDecay_Bushes.spawnBush(square)
         bush:addAttachedAnimSpriteByName(flowerSprite)
     end
 
-    return bush
+    return WDecay_Placement.finalizeObject(bush)
 end
 
 local cachedBase = nil

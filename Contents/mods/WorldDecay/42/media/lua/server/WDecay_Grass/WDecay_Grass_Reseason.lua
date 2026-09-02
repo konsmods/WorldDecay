@@ -20,58 +20,24 @@ local function reseasonGrass(object)
     if sprite then
         object:setSprite(sprite)
         object:transmitUpdatedSpriteToClients()
+        if WDecay_DebugCountTransmission then WDecay_DebugCountTransmission("sprite") end
     end
 
     return true
 end
 
--- Reseasons recognized grass on one square.
-local function reseasonSquare(square)
-    local objects = square and square:getObjects()
-    if not objects then return 0, 0 end
-
-    local evaluated, changed = 0, 0
-
-    for i = 0, objects:size() - 1 do
-        local object = objects:get(i)
-        if object and object:hasModData() and object:getModData()["WDecay_Cleanable"] == "grass" then
-            local before = object:getSpriteName()
-            if reseasonGrass(object) then
-                evaluated = evaluated + 1
-                if object:getSpriteName() ~= before then changed = changed + 1 end
-            end
-        end
+local function reseasonObject(object)
+    if not object or not object:hasModData() or object:getModData()["WDecay_Cleanable"] ~= "grass" then
+        return 0, 0
     end
-
-    return evaluated, changed
-end
-
--- Reseasons all grass objects in one chunk.
-local function reseasonChunk(chunk)
-    if not chunk then return 0, 0 end
-
-    local evaluated, changed = 0, 0
-    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
-        for cx = 0, 7 do
-            for cy = 0, 7 do
-                local sqEvaluated, sqChanged = reseasonSquare(chunk:getGridSquare(cx, cy, z))
-                evaluated = evaluated + sqEvaluated
-                changed = changed + sqChanged
-            end
-        end
-    end
-    return evaluated, changed
+    local before = object:getSpriteName()
+    if not reseasonGrass(object) then return 0, 0 end
+    return 1, object:getSpriteName() ~= before and 1 or 0
 end
 
 -- Manual full-area reseason helper.
 local function reseasonAllLoadedChunks()
-    local totalEvaluated, totalChanged = 0, 0
-    WDecay_LoadedChunks.forEachLoadedSquare(function(square)
-        local evaluated, changed = reseasonSquare(square)
-        totalEvaluated = totalEvaluated + evaluated
-        totalChanged = totalChanged + changed
-    end)
-    return totalEvaluated, totalChanged
+    return WDecay_LoadedChunks.forEachLoadedObject(reseasonObject)
 end
 
 -- Registers seasonal hooks only when seasonal grass processing is enabled.
@@ -81,8 +47,7 @@ local function registerIfEnabled()
     if not (WDecay_Scaling.isSeasonalBiasEnabled() and WDecay_Features.isEnabled("grass")) then return end
 
     registered = true
-    Events.LoadChunk.Add(reseasonChunk)
-    WDecay_LoadedChunks.registerReseasonCallback(reseasonSquare)
+    WDecay_LoadedChunks.registerReseasonCallback(reseasonObject)
 end
 
 Events.OnGameStart.Add(registerIfEnabled)

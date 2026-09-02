@@ -57,7 +57,7 @@ function WDecay_Grass.spawnGrass(square, cleanableType)
     modData[WDecay_Grass.MODDATA_STAGE] = stage
     modData[WDecay_Grass.MODDATA_VARIETY] = variety
 
-    return grass
+    return WDecay_Placement.finalizeObject(grass)
 end
 
 local cachedBase = nil

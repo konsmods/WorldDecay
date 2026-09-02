@@ -6,6 +6,9 @@ local function initDebugCounters()
     debugCounters.ChunksProcessed = 0
     debugCounters.ChunksFailed = 0
     debugCounters.SquaresProcessed = 0
+    debugCounters.Passes = { initial = 0, redecay = 0, seasonal = 0 }
+    debugCounters.Objects = { grass = 0, bush = 0, tree = 0 }
+    debugCounters.Transmissions = { complete = 0, modData = 0, sprite = 0, overlay = 0 }
 
     if not WDecay_PlacementGenerators then return end
 
@@ -94,6 +97,24 @@ function WDecay_DebugCountChunk(success)
     end
 end
 
+function WDecay_DebugCountObject(kind)
+    if debugCounters.Objects and debugCounters.Objects[kind] then
+        debugCounters.Objects[kind] = debugCounters.Objects[kind] + 1
+    end
+end
+
+function WDecay_DebugCountTransmission(kind)
+    if debugCounters.Transmissions and debugCounters.Transmissions[kind] then
+        debugCounters.Transmissions[kind] = debugCounters.Transmissions[kind] + 1
+    end
+end
+
+function WDecay_DebugCountPass(kind)
+    if debugCounters.Passes and debugCounters.Passes[kind] then
+        debugCounters.Passes[kind] = debugCounters.Passes[kind] + 1
+    end
+end
+
 function WDecay_DebugPrintStatus()
     if not debugCounters.Placement then
         print("[WDecay-Debug] Counters not initialized yet")
@@ -103,6 +124,16 @@ function WDecay_DebugPrintStatus()
     print("[WDecay-Debug] === MANUAL STATUS ===")
     print("[WDecay-Debug] Chunks processed: " .. debugCounters.ChunksProcessed)
     print("[WDecay-Debug] Chunks failed (not ready): " .. debugCounters.ChunksFailed)
+
+    if debugCounters.Objects then
+        print("[WDecay-Debug] Objects: grass=" .. debugCounters.Objects.grass .. " bush=" .. debugCounters.Objects.bush .. " tree=" .. debugCounters.Objects.tree)
+    end
+    if debugCounters.Transmissions then
+        print("[WDecay-Debug] Transmissions: complete=" .. debugCounters.Transmissions.complete .. " modData=" .. debugCounters.Transmissions.modData .. " sprite=" .. debugCounters.Transmissions.sprite .. " overlay=" .. debugCounters.Transmissions.overlay)
+    end
+    if debugCounters.Passes then
+        print("[WDecay-Debug] Passes: initial=" .. debugCounters.Passes.initial .. " redecay=" .. debugCounters.Passes.redecay .. " seasonal=" .. debugCounters.Passes.seasonal)
+    end
 
     if WDecay_PlacementGenerators then
         print("[WDecay-Debug] Placement generators (" .. #WDecay_PlacementGenerators .. " total):")
@@ -138,6 +169,15 @@ function WDecay_Debug.resetPerfCounters()
     WDecay_Debug.totalChunkTimeMs = 0
     WDecay_Debug.totalChunksProcessed = 0
     WDecay_Debug.objectsPlaced = 0
+    if debugCounters.Objects then
+        for kind in pairs(debugCounters.Objects) do debugCounters.Objects[kind] = 0 end
+    end
+    if debugCounters.Transmissions then
+        for kind in pairs(debugCounters.Transmissions) do debugCounters.Transmissions[kind] = 0 end
+    end
+    if debugCounters.Passes then
+        for kind in pairs(debugCounters.Passes) do debugCounters.Passes[kind] = 0 end
+    end
 end
 
 function WDecay_Debug.printPerfSummary(tickCounter)
@@ -151,6 +191,9 @@ function WDecay_Debug.printPerfSummary(tickCounter)
         avg = math.floor(WDecay_Debug.totalChunkTimeMs / WDecay_Debug.totalChunksProcessed)
     end
 
-    print("[WDecay] Perf tick=" .. tickCounter .. " chunks(H=" .. WDecay_Debug.chunksHigh .. "/L=" .. WDecay_Debug.chunksLow .. ") avg=" .. avg .. "ms total=" .. WDecay_Debug.totalChunksProcessed .. " placed=" .. WDecay_Debug.objectsPlaced)
+    local objects = debugCounters.Objects or {}
+    local transmissions = debugCounters.Transmissions or {}
+    local passes = debugCounters.Passes or {}
+    print("[WDecay] Perf tick=" .. tickCounter .. " chunks(H=" .. WDecay_Debug.chunksHigh .. "/L=" .. WDecay_Debug.chunksLow .. ") avg=" .. avg .. "ms total=" .. WDecay_Debug.totalChunksProcessed .. " placed=" .. WDecay_Debug.objectsPlaced .. " objects=" .. (objects.grass or 0) .. "/" .. (objects.bush or 0) .. "/" .. (objects.tree or 0) .. " tx=" .. (transmissions.complete or 0) .. "/" .. (transmissions.modData or 0) .. "/" .. (transmissions.sprite or 0) .. "/" .. (transmissions.overlay or 0) .. " passes=" .. (passes.initial or 0) .. "/" .. (passes.redecay or 0) .. "/" .. (passes.seasonal or 0))
     WDecay_Debug.resetPerfCounters()
 end

@@ -30,59 +30,21 @@ local function reseasonVine(object)
 
     object:setOverlaySprite(desired, 1.0, 1.0, 1.0, 1.0)
     object:transmitUpdatedSpriteToClients()
+    if WDecay_DebugCountTransmission then WDecay_DebugCountTransmission("overlay") end
 
     return true
 end
 
--- Reseasons recognized vines on one square.
-local function reseasonSquare(square)
-    local objects = square and square:getObjects()
-    if not objects then return 0, 0 end
-
-    local evaluated, changed = 0, 0
-
-    for i = 0, objects:size() - 1 do
-        local object = objects:get(i)
-        if object then
-            local before = WDecay_CleanVegetation.getOverlaySpriteName(object)
-            if reseasonVine(object) then
-                evaluated = evaluated + 1
-                if WDecay_CleanVegetation.getOverlaySpriteName(object) ~= before then
-                    changed = changed + 1
-                end
-            end
-        end
-    end
-
-    return evaluated, changed
-end
-
--- Reseasons all vines in one chunk.
-local function reseasonChunk(chunk)
-    if not chunk then return 0, 0 end
-
-    local evaluated, changed = 0, 0
-    for z = chunk:getMinLevel(), chunk:getMaxLevel() do
-        for cx = 0, 7 do
-            for cy = 0, 7 do
-                local sqEvaluated, sqChanged = reseasonSquare(chunk:getGridSquare(cx, cy, z))
-                evaluated = evaluated + sqEvaluated
-                changed = changed + sqChanged
-            end
-        end
-    end
-    return evaluated, changed
+local function reseasonObject(object)
+    if not object then return 0, 0 end
+    local before = WDecay_CleanVegetation.getOverlaySpriteName(object)
+    if not reseasonVine(object) then return 0, 0 end
+    return 1, WDecay_CleanVegetation.getOverlaySpriteName(object) ~= before and 1 or 0
 end
 
 -- Manual full-area reseason helper.
 local function reseasonAllLoadedChunks()
-    local totalEvaluated, totalChanged = 0, 0
-    WDecay_LoadedChunks.forEachLoadedSquare(function(square)
-        local evaluated, changed = reseasonSquare(square)
-        totalEvaluated = totalEvaluated + evaluated
-        totalChanged = totalChanged + changed
-    end)
-    return totalEvaluated, totalChanged
+    return WDecay_LoadedChunks.forEachLoadedObject(reseasonObject)
 end
 
 -- Registers seasonal hooks only when seasonal vine processing is enabled.
@@ -92,8 +54,7 @@ local function registerIfEnabled()
     if not (WDecay_Scaling.isSeasonalBiasEnabled() and WDecay_Features.isEnabled("vines")) then return end
 
     registered = true
-    Events.LoadChunk.Add(reseasonChunk)
-    WDecay_LoadedChunks.registerReseasonCallback(reseasonSquare)
+    WDecay_LoadedChunks.registerReseasonCallback(reseasonObject)
 end
 
 Events.OnGameStart.Add(registerIfEnabled)
