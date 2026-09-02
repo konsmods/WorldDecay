@@ -139,7 +139,7 @@ function WDecay_Regen(radius, player)
     radius = tonumber(radius) or 3
     WDecay_CleanArea(radius, player)
     if WDecay_Dispatcher_QueueArea then
-        WDecay_Dispatcher_QueueArea(radius, true, player)
+        WDecay_Dispatcher_QueueArea(radius, true, player, true)
     end
 
     WDecay_ReapplyOverlays(radius, player)
@@ -148,7 +148,7 @@ end
 function WDecay_Redecay(radius, player)
     radius = tonumber(radius) or 3
     if WDecay_Dispatcher_QueueArea then
-        WDecay_Dispatcher_QueueArea(radius, false, player)
+        WDecay_Dispatcher_QueueArea(radius, false, player, false)
     end
 end
 

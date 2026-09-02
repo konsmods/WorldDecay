@@ -43,24 +43,17 @@ local PRIORITY_RADIUS = 5
 local pendingChunks = {}
 local chunkWork = {}
 
--- A chunk can fail for reasons that are purely about timing (grid squares
--- not populated yet, or unloaded between a "pending" tick and its resume).
--- Retry a bounded number of times, then cool down instead of being
--- immediately re-queued by the next LoadChunk/scan -- confirmed by testing
--- that without this, a small number of chunks can fail indefinitely,
--- forever resetting the scan-interval backoff. chunkSucceeded() clears both
--- so a chunk that does process cleanly doesn't carry this history forward.
+-- Retry timing failures five times, then use progressive cooldowns.
 local chunkFailAttempts = {}
+local chunkCooldownLevel = {}
 local MAX_CHUNK_FAIL_RETRIES = 5
 local chunkFailCooldownUntilMs = {}
-local CHUNK_FAIL_COOLDOWN_MS = 60000
+local CHUNK_FAIL_COOLDOWN_MS = { 60000, 300000, 900000 }
 
 -- Tallied, not printed per-chunk -- a print() per failure was console spam
 -- during bursts. Flushed with the "Queue:" summary in OnTick.
 local failedCooldownCount = 0
 
--- Same cooldown for every failure reason -- it's the retrying that costs
--- OnTick time, not the specific reason, so there's no need to special-case one.
 local function chunkFailedTransiently(key, maxRetries)
     maxRetries = maxRetries or MAX_CHUNK_FAIL_RETRIES
     local attempts = (chunkFailAttempts[key] or 0) + 1
@@ -69,13 +62,16 @@ local function chunkFailedTransiently(key, maxRetries)
         return "pending"
     end
     chunkFailAttempts[key] = nil
-    chunkFailCooldownUntilMs[key] = getTimestampMs() + CHUNK_FAIL_COOLDOWN_MS
+    local level = math.min((chunkCooldownLevel[key] or 0) + 1, #CHUNK_FAIL_COOLDOWN_MS)
+    chunkCooldownLevel[key] = level
+    chunkFailCooldownUntilMs[key] = getTimestampMs() + CHUNK_FAIL_COOLDOWN_MS[level]
     failedCooldownCount = failedCooldownCount + 1
     return false
 end
 
 local function chunkSucceeded(key)
     chunkFailAttempts[key] = nil
+    chunkCooldownLevel[key] = nil
     chunkFailCooldownUntilMs[key] = nil
 end
 
@@ -954,6 +950,7 @@ local function processChunkSquares(chunk, key, deadline)
     end
     if DEBUG_MODE and WDecay_Debug and WDecay_Debug.totalChunkTimeMs then
         WDecay_Debug.totalChunkTimeMs = WDecay_Debug.totalChunkTimeMs + getTimestampMs() - state.startedAt
+        WDecay_Debug.totalTimedChunks = (WDecay_Debug.totalTimedChunks or 0) + 1
     end
     if WDecay_DebugCountPass then WDecay_DebugCountPass("initial") end
     return true
@@ -977,6 +974,7 @@ local function enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
     if not chunk then return 0 end
 
     pendingChunks[key] = true
+    if WDecay_Debug then WDecay_Debug.queueAdded = (WDecay_Debug.queueAdded or 0) + 1 end
     local dx = (wx * 8 + 4) - worldX
     local dy = (wy * 8 + 4) - worldY
     local sqDistance = dx * dx + dy * dy
@@ -1075,6 +1073,7 @@ local function queueChunk(chunk)
 
     ensureOnTickRegistered()
     pendingChunks[key] = true
+    if WDecay_Debug then WDecay_Debug.queueAdded = (WDecay_Debug.queueAdded or 0) + 1 end
     local targetDist = 999999
     local cx, cy = wx * 8 + 4, wy * 8 + 4
     local px, py = currentTrackedPlayerPos()
@@ -1145,6 +1144,7 @@ local function initModDataCache()
 end
 
 local function requeueChunkWork(chunk, key, wx, wy, lowPriority)
+    if WDecay_Debug then WDecay_Debug.queueRequeued = (WDecay_Debug.queueRequeued or 0) + 1 end
     if lowPriority then
         chunkQueueTailLow = chunkQueueTailLow + 1
         chunkQueueLowChunks[chunkQueueTailLow] = chunk
@@ -1169,12 +1169,15 @@ local function runQueuedChunk(chunk, key, wx, wy, lowPriority, deadline)
         pendingChunks[key] = nil
         chunkWork[key] = nil
         if WDecay_DebugCountChunk then WDecay_DebugCountChunk(false) end
+        if WDecay_Debug then WDecay_Debug.queueFailed = (WDecay_Debug.queueFailed or 0) + 1 end
         print("[WDecay] Chunk " .. key .. " error: " .. tostring(result):sub(1, 120))
     elseif result == "pending" then
         requeueChunkWork(chunk, key, wx, wy, lowPriority)
     else
         pendingChunks[key] = nil
         if result ~= "protected" and WDecay_DebugCountChunk then WDecay_DebugCountChunk(result == true) end
+        if result == false and WDecay_Debug then WDecay_Debug.queueFailed = (WDecay_Debug.queueFailed or 0) + 1 end
+        if WDecay_Debug then WDecay_Debug.queueCompleted = (WDecay_Debug.queueCompleted or 0) + 1 end
         if result then markSeen(key) end
     end
 end
@@ -1340,6 +1343,10 @@ function OnTick()
     end
 
     if DEBUG_MODE then
+        if WDecay_Debug then
+            WDecay_Debug.queueHigh = math.max(0, chunkQueueTailHigh - chunkQueueHeadHigh + 1)
+            WDecay_Debug.queueLow = math.max(0, chunkQueueTailLow - chunkQueueHeadLow + 1)
+        end
         debugTickCounter = debugTickCounter + 1
         if debugTickCounter >= 30 then
             debugTickCounter = 0
@@ -1361,6 +1368,10 @@ function OnTick()
     if DEBUG_MODE and (effectiveBudgetMs < TIME_BUDGET_MS) ~= wasDrivingFast then
         wasDrivingFast = effectiveBudgetMs < TIME_BUDGET_MS
         print("[WDecay] Fast travel budget " .. (wasDrivingFast and "engaged" or "released"))
+    end
+    if WDecay_Debug then
+        WDecay_Debug.budgetMs = effectiveBudgetMs
+        WDecay_Debug.scanRadius = SCAN_RADIUS
     end
 
     local startMs = getTimestampMs()
@@ -1433,10 +1444,44 @@ local function forEachChunkAround(radius, fn, player)
     end
 end
 
-function WDecay_Dispatcher_QueueArea(radius, wipeMarkers, player)
+local function prioritizeQueuedArea(radius, player)
+    local wanted = {}
+    forEachChunkAround(radius, function(chunk, wx, wy)
+        wanted[GenerateKey(wx, wy)] = true
+    end, player)
+
+    local kept = 0
+    for i = chunkQueueHeadLow, chunkQueueTailLow do
+        local key = chunkQueueLowKeys[i]
+        if wanted[key] then
+            chunkQueueTailHigh = chunkQueueTailHigh + 1
+            chunkQueueHighChunks[chunkQueueTailHigh] = chunkQueueLowChunks[i]
+            chunkQueueHighKeys[chunkQueueTailHigh] = key
+            chunkQueueHighWx[chunkQueueTailHigh] = chunkQueueLowWx[i]
+            chunkQueueHighWy[chunkQueueTailHigh] = chunkQueueLowWy[i]
+        else
+            kept = kept + 1
+            chunkQueueLowChunks[chunkQueueHeadLow + kept - 1] = chunkQueueLowChunks[i]
+            chunkQueueLowKeys[chunkQueueHeadLow + kept - 1] = key
+            chunkQueueLowWx[chunkQueueHeadLow + kept - 1] = chunkQueueLowWx[i]
+            chunkQueueLowWy[chunkQueueHeadLow + kept - 1] = chunkQueueLowWy[i]
+        end
+    end
+    for i = chunkQueueHeadLow + kept, chunkQueueTailLow do
+        chunkQueueLowChunks[i] = nil
+        chunkQueueLowKeys[i] = nil
+        chunkQueueLowWx[i] = nil
+        chunkQueueLowWy[i] = nil
+    end
+    chunkQueueTailLow = chunkQueueHeadLow + kept - 1
+end
+
+function WDecay_Dispatcher_QueueArea(radius, wipeMarkers, player, highPriority)
     ensureOnTickRegistered()
     radius = radius or 3
     local queued = 0
+
+    if highPriority then prioritizeQueuedArea(radius, player) end
 
     if chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow then
         chunkQueueHeadHigh = 1
@@ -1497,11 +1542,20 @@ function WDecay_Dispatcher_QueueArea(radius, wipeMarkers, player)
 
         if not pendingChunks[key] then
             pendingChunks[key] = true
-            chunkQueueTailLow = chunkQueueTailLow + 1
-            chunkQueueLowChunks[chunkQueueTailLow] = chunk
-            chunkQueueLowKeys[chunkQueueTailLow] = key
-            chunkQueueLowWx[chunkQueueTailLow] = wx
-            chunkQueueLowWy[chunkQueueTailLow] = wy
+            if WDecay_Debug then WDecay_Debug.queueAdded = (WDecay_Debug.queueAdded or 0) + 1 end
+            if highPriority then
+                chunkQueueTailHigh = chunkQueueTailHigh + 1
+                chunkQueueHighChunks[chunkQueueTailHigh] = chunk
+                chunkQueueHighKeys[chunkQueueTailHigh] = key
+                chunkQueueHighWx[chunkQueueTailHigh] = wx
+                chunkQueueHighWy[chunkQueueTailHigh] = wy
+            else
+                chunkQueueTailLow = chunkQueueTailLow + 1
+                chunkQueueLowChunks[chunkQueueTailLow] = chunk
+                chunkQueueLowKeys[chunkQueueTailLow] = key
+                chunkQueueLowWx[chunkQueueTailLow] = wx
+                chunkQueueLowWy[chunkQueueTailLow] = wy
+            end
         end
 
         queued = queued + 1

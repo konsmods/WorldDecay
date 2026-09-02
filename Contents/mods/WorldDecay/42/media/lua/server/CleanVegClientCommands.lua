@@ -291,7 +291,9 @@ local function onDebugCommand(module, command, player, args)
         local names = { trees = "reseasonNearbyTrees", bushes = "reseasonNearbyBushes", grass = "reseasonNearbyGrass", vines = "reseasonNearbyVines" }
         local fn = names[args.kind] and WD_DebugTools and WD_DebugTools[names[args.kind]]
         if fn then fn() end
-    elseif action == "status" and WDecay_Status then WDecay_Status()
+    elseif action == "status" then
+        if WDecay_Status then WDecay_Status() end
+        if WDecay_DebugPrintStatus then WDecay_DebugPrintStatus() end
     elseif action == "setDays" and WDecay_SetDays then WDecay_SetDays(args.days)
     elseif action == "clearDays" and WDecay_ClearDays then WDecay_ClearDays()
     elseif action == "addDays" and WDecay_AddDays then WDecay_AddDays(args.days)

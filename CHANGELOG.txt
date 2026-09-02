@@ -1,3 +1,10 @@
+[h1]2.2.1 - Pending[/h1]
+[list]
+[*]Fixed debug-panel status output to include server performance counters.
+[*]Regeneration areas now receive high queue priority, including chunks already queued nearby.
+[*]Added progressive cooldowns for repeatedly failing chunks.
+[/list]
+
 [h1]2.2.0[/h1]
 [list]
 [*]Improved MP vegetation handling: grass, bushes, and trees now use server-created special objects and are transmitted once after complete setup.

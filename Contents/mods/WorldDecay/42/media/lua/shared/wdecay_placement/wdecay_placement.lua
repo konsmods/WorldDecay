@@ -132,6 +132,7 @@ function WDecay_Placement.finalizeObject(object)
     object:transmitModData()
     if WDecay_DebugCountTransmission then WDecay_DebugCountTransmission("modData") end
     if WDecay_DebugCountObject then WDecay_DebugCountObject(object:getModData()["WDecay_Cleanable"]) end
+    if WDecay_Debug then WDecay_Debug.objectsPlaced = (WDecay_Debug.objectsPlaced or 0) + 1 end
     return object
 end
 
