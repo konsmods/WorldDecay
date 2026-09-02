@@ -1,10 +1,15 @@
-[h1]2.2.0 Pending[/h1]
+[h1]2.2.0[/h1]
 [list]
 [*]Improved MP vegetation handling: grass, bushes, and trees now use server-created special objects and are transmitted once after complete setup.
 [*]Fixed grass and bush metadata and attached sprites not being included in MP transmission.
 [*]Unified normal and special-object scans so IsoTrees are included in re-decay, duplicate checks, placement counts, and seasonal refreshes.
 [*]Combined grass, bush, tree, and vine seasonal updates into one shared object pass for chunk loads and seasonal changes.
 [*]Added simple debug counters for generation passes, vegetation objects, overlays, and network transmissions.
+[/list]
+
+[h1]2.1.9[/h1]
+[list]
+[*]Fixed MP transmission for spawned vegetation and switched generated trees to vanilla-style IsoTree objects.
 [/list]
 
 [h1]2.1.8[/h1]
