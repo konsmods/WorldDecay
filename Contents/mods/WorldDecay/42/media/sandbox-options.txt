@@ -214,14 +214,14 @@ option WDecay.seasonalBiasEnabled
 	translation = WDecay_seasonalBiasEnabled,
 }
 
-option WDecay.scanInterval
+option WDecay.scanIntervalSeconds
 {
-	type = integer,
-	min = 20,
-	max = 500,
-	default = 100,
+	type = double,
+	min = 0.25,
+	max = 60.0,
+	default = 2.0,
 	page = WDecay,
-	translation = WDecay_scanInterval,
+	translation = WDecay_scanIntervalSeconds,
 }
 
 option WDecay.scanRadius
@@ -264,14 +264,14 @@ option WDecay.fastTravelBudgetMs
 	translation = WDecay_fastTravelBudgetMs,
 }
 
-option WDecay.fastTravelScanInterval
+option WDecay.fastTravelScanIntervalSeconds
 {
-	type = integer,
-	min = 1,
-	max = 500,
-	default = 25,
+	type = double,
+	min = 0.1,
+	max = 10.0,
+	default = 0.5,
 	page = WDecay,
-	translation = WDecay_fastTravelScanInterval,
+	translation = WDecay_fastTravelScanIntervalSeconds,
 }
 
 option WDecay.fastTravelScanRadius

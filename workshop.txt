@@ -37,7 +37,15 @@ description=This mod changes world generation heavily. Trees, bushes and grass o
 description=
 description=First load: Some lag is normal while visible chunks are generated. Processed chunks are cached and the dispatcher becomes mostly idle until new chunks, re-decay, or seasonal updates need work.
 description=
-description=[b]Performance settings:[/b] Time Budget controls generation work per frame; lower it for smoother FPS. Fast Travel Speed and Fast Travel Time Budget reduce work while driving. Scan Interval controls how often new chunks are searched (MP doubles it); Scan Radius increases the area searched, while Priority Radius only controls what is processed first.
+description=[b]Performance settings:[/b] Time Budget controls generation work per frame; lower it for smoother FPS. Fast Travel Time Budget does the same while driving. Scan Interval controls how often new chunks are searched; Scan Radius is the area searched, while Priority Radius is the near-player area processed first.
+description=
+description=[b]Quick FPS tuning:[/b]
+description=[list]
+description=[*]Stutter while generating? Lower Time Budget first. Lower = smoother, but chunks finish later.
+description=[*]Stutter while driving? Lower Fast Travel Time Budget, then reduce Fast Travel Scan/ Priority Radius.
+description=[*]Periodic hitching? Raise Scan Interval or reduce Scan Radius.
+description=[*]Still slow when the mod is idle? Lower object density or disable features you do not use, especially trees, bushes, grass, vines and overlays.
+description=[/list]
 description=
 description=[b]Recommendations:[/b] Lower object densities first if you experience lag, especially trees, bushes and grass objects. In multiplayer, host and server specs matter a lot.
 description=

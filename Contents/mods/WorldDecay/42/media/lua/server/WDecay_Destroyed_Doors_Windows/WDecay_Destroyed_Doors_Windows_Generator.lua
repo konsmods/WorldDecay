@@ -1,6 +1,7 @@
 local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_Placement = require('wdecay_placement/wdecay_placement')
 local WDecay_Protection = require('wdecay_protection/wdecay_protection')
 
 local TIME_KEY = "WDecay_Destroyed_Doors_Windows-LoadGridsquare"
@@ -52,9 +53,8 @@ local function LoadGridsquare(square, checkResult, level)
         if checkResult.hasWindow and WDecay_Scaling.scaleFor('urban', getDestroyedWindowsPercentage()) >= randomizer:random(1, 100) then 
             doorWindowObject:smashWindow(false, false)
         elseif checkResult.hasDoor and WDecay_Scaling.scaleFor('urban', getDestroyedDoorsPercentage()) >= randomizer:random(1, 100) and not checkResult.hasWindow then
-            -- ponytail: IsoDoor.destroy() no propaga a partes hermanas; skip multi-tile (garage y double doors)
-            -- ceiling: las puertas de garaje/doble no se destruyen en el decay; upgrade: usar IsoDoor.destroyGarageDoor
-            if IsoDoor.getGarageDoorIndex(doorWindowObject) == -1 and IsoDoor.getDoubleDoorIndex(doorWindowObject) == -1 then
+            if IsoDoor.getGarageDoorIndex(doorWindowObject) == -1 and IsoDoor.getDoubleDoorIndex(doorWindowObject) == -1
+                and not WDecay_Placement.isUnsafeMultiTile(doorWindowObject) then
                 doorWindowObject:destroy()
             end
         end

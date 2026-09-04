@@ -1,5 +1,6 @@
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_Placement = require('wdecay_placement/wdecay_placement')
 local randomizer = WDecay_Random.get()
 local WDecay_Protection = require('wdecay_protection/wdecay_protection')
 
@@ -123,7 +124,7 @@ function WDecay_Fences.applyBreakableFenceDamage(obj, destroyWeight)
     destroyWeight = destroyWeight or 20
     local roll = randomizer:random(0, 100)
 
-    if roll < destroyWeight then
+    if roll < destroyWeight and not WDecay_Placement.isUnsafeMultiTile(obj) then
         classBrokenFences:destroyFence(obj, dir)
 
         local sq = obj:getSquare()

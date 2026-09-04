@@ -75,8 +75,8 @@ function WDecay_DebugStatusPanel:prerender()
             .. " players=" .. (d.fastTravelPlayerCount or 0)
             .. " vehicles=" .. (d.fastTravelVehicleCount or 0)),
         "Speed: " .. string.format("%.1f", d.fastTravelMaxSpeedKmh or 0) .. "/"
-            .. (d.fastTravelThresholdKmh or 0) .. " km/h | scan r=" .. (d.effectiveScanRadius or 0)
-            .. " every " .. (d.effectiveScanInterval or 0) .. " ticks",
+            .. (d.fastTravelThresholdKmh or 0) .. " km/h | scan every "
+            .. string.format("%.2f/%.2fs", d.scanIntervalSeconds or 0, d.fastTravelScanIntervalSeconds or 0),
         "Current high: " .. (d.currentHigh and tostring(d.currentHigh) or "none"),
         "Current low: " .. (d.currentLow and tostring(d.currentLow) or "none"),
         "-- computational cost --",
@@ -92,7 +92,10 @@ function WDecay_DebugStatusPanel:prerender()
             .. string.format("%.1f", (d.tickIntervalAvg or 0) > 0 and (1000 / d.tickIntervalAvg) or 0) .. " FPS, WDecay ~"
             .. string.format("%.1f", (d.tickIntervalAvg or 0) > 0 and ((d.totalMsAvg or 0) / d.tickIntervalAvg * 100) or 0) .. "% of a tick)",
         "Discovery throttled: scan=" .. (d.scanThrottled or 0),
-        "Scans: ran=" .. (d.scanRuns or 0) .. " movement-skipped=" .. (d.scanMovementSkipped or 0),
+        "Scans: ran=" .. (d.scanRuns or 0) .. " skipped=" .. (d.scanMovementSkipped or 0)
+            .. " due=" .. (d.scanDue or 0) .. " deferred=" .. (d.scanDeferred or 0)
+            .. " oldest=" .. math.floor(d.scanOldestOverdueMs or 0) .. "ms",
+        "Per-player queue cap H/T: " .. (d.playerHighQueueLimit or 0) .. "/" .. (d.playerQueueLimit or 0),
         "Discovery source: scan=" .. (d.scanQueued or 0),
         "-- visible chunk states (radius " .. (d.radius or 12) .. ") --",
         "High/Low/Pending: " .. (c.high or 0) .. "/" .. (c.low or 0) .. "/" .. (c.pending or 0),

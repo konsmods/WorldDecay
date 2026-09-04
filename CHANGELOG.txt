@@ -1,3 +1,10 @@
+[h1]2.3.1[/h1]
+[list]
+[*]Improved multiplayer chunk scheduling with real-time per-player scans, fair queue shares, and startup scans that finish discovery while players stand still.
+[*]Added normal and fast-travel scan intervals in seconds, plus clearer scheduler status diagnostics and performance-tuning guidance.
+[*]Protected multi-tile fences and doors from unsafe full-removal calls that could cause tile-object errors while streaming.
+[/list]
+
 [h1]2.3.0[/h1]
 [list]
 [*]Reworked chunk discovery into a timer-driven, high/low priority scheduler with resumable work, stale-queue cleanup, queue caps, and fast-travel backpressure.

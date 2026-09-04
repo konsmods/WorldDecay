@@ -42,6 +42,21 @@ function WDecay_Placement.isSafe(square)
     return safe
 end
 
+-- Full removal is unsafe for multi-tile objects unless every linked part is loaded.
+function WDecay_Placement.isUnsafeMultiTile(object)
+    local ok, grid = pcall(function()
+        local sprite = object:getSprite()
+        return sprite and sprite:getSpriteGrid()
+    end)
+    if not ok then return true end
+    if not grid then return false end
+
+    local sized, width, height = pcall(function()
+        return grid:getWidth(), grid:getHeight()
+    end)
+    return not sized or width > 1 or height > 1
+end
+
 -- Clustering was removed because its neighbor scans dominated placement cost.
 -- The density curve remains as inexpensive chance shaping.
 function WDecay_Placement.clusterChance(square, cleanableType, chance, radius)
