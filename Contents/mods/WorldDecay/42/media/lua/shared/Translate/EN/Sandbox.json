@@ -4,6 +4,8 @@
     "Sandbox_WDecay_UrbanDecay": "World Decay - Urban Decay",
     "Sandbox_WDecay_timeBudgetMs": "Time Budget (ms)",
     "Sandbox_WDecay_timeBudgetMs_tooltip": "Maximum milliseconds per frame for world generation. Lower = smoother FPS but slower generation. Higher = faster generation but possible lag spikes.",
+    "Sandbox_WDecay_roadGrassNaturalRange": "Road Grass Natural Range (tiles)",
+    "Sandbox_WDecay_roadGrassNaturalRange_tooltip": "How far road-grass patches can spread from natural ground. Higher values reach farther from road edges and do a few more checks per processed chunk.",
     "Sandbox_WDecay_scanIntervalSeconds": "Scan Interval (seconds)",
     "Sandbox_WDecay_scanIntervalSeconds_tooltip": "How often the mod scans for new chunks around each player. Lower = more responsive but higher CPU usage.",
     "Sandbox_WDecay_scanRadius": "Scan Radius (chunks)",

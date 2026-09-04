@@ -18,6 +18,9 @@ local function LoadGridsquare(square, checkResult, level)
 
     if level ~= 0 and not checkResult.hasRoof then return end
 
+    -- Road grass is placed by the dispatcher's chunk-local cluster pass.
+    if level == 0 and checkResult.isRoad then return false end
+
     local percentage = 0
     if level ~= 0 and checkResult.hasRoof then
         percentage = WDecay_Grass.getBasePercentageOnRoof()
@@ -31,7 +34,7 @@ local function LoadGridsquare(square, checkResult, level)
 
     if percentage <= 0 then return end
 
-    local chance = WDecay_Placement.clusterChance(square, "grass", WDecay_Scaling.scaleFor('nature', percentage), 2)
+    local chance = WDecay_Placement.shapeDensityChance(WDecay_Scaling.scaleFor('nature', percentage))
     if chance >= randomizer:random(1, 100) then
         if not WDecay_Placement.isSafe(square) then return false end
         return WDecay_Grass.spawnGrass(square) ~= nil

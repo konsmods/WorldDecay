@@ -1,6 +1,7 @@
 require('luautils')
 local WDecay_CleanVegetation = require('wdecay_cleanvegetation/wdecay_cleanvegetation')
 local WDecay_Season = require('wdecay_season/wdecay_season')
+local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 
 local SEASONAL_DEBUG_MODULE = "WDecaySeasonalDebug"
 
@@ -257,9 +258,15 @@ local function onDebugCommand(module, command, player, args)
         if WDecay_DebugPrintStatus then WDecay_DebugPrintStatus() end
     elseif action == "monitor" and player and WDecay_Dispatcher_GetMonitorData then
         sendServerCommand(player, "WDecayDebug", "Monitor", WDecay_Dispatcher_GetMonitorData(player, args.radius))
-    elseif action == "setDays" and WDecay_SetDays then WDecay_SetDays(args.days)
-    elseif action == "clearDays" and WDecay_ClearDays then WDecay_ClearDays()
-    elseif action == "addDays" and WDecay_AddDays then WDecay_AddDays(args.days)
+    elseif action == "setDays" and WDecay_SetDays then
+        WDecay_SetDays(args.days)
+        sendServerCommand(player, "WDecayDebug", "Age", { hasOverride = true, days = WDecay_Scaling.getDebugAgeDays() })
+    elseif action == "clearDays" and WDecay_ClearDays then
+        WDecay_ClearDays()
+        sendServerCommand(player, "WDecayDebug", "Age", { hasOverride = false })
+    elseif action == "addDays" and WDecay_AddDays then
+        WDecay_AddDays(args.days)
+        sendServerCommand(player, "WDecayDebug", "Age", { hasOverride = true, days = WDecay_Scaling.getDebugAgeDays() })
     elseif action == "regen" and WDecay_Regen then WDecay_Regen(args.radius, player)
     elseif action == "redecay" and WDecay_Redecay then WDecay_Redecay(args.radius, player)
     elseif action == "timerRedecay" and WDecay_TimerRedecay then WDecay_TimerRedecay(args.radius, player)

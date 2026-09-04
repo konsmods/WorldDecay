@@ -36,6 +36,8 @@
     "Sandbox_WDecay_ReadPlease_tooltip":"In der Mod-Beschreibung, stehen alle Informationen zu den Features",
     "Sandbox_WDecay_timeBudgetMs":"Zeit-Budget in (ms)",
     "Sandbox_WDecay_timeBudgetMs_tooltip":"Maximale Millisekunden pro Frame für die Weltgenerierung. Niedriger = Mehr FPS und langsame Generierung. Höher = schnelle Generierung und niedrigere FPS.",
+    "Sandbox_WDecay_roadGrassNaturalRange":"Straßengras-Naturreichweite (Kacheln)",
+    "Sandbox_WDecay_roadGrassNaturalRange_tooltip":"Wie weit Straßengras von natürlichem Boden wachsen kann. Höhere Werte reichen weiter von Straßenrändern weg und prüfen pro Chunk etwas mehr Felder.",
     "Sandbox_WDecay_scanIntervalSeconds":"Scan-Intervall (Sekunden)",
     "Sandbox_WDecay_scanIntervalSeconds_tooltip":"Wie oft der Mod nach neuen Chunks um jeden Spieler sucht. Niedriger = schneller, aber höhere CPU-Auslastung.",
     "Sandbox_WDecay_scanRadius":"Scan Radius (chunks)",

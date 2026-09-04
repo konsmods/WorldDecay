@@ -851,9 +851,19 @@ option WDecay.outdoorGrassPercentageOnRoad
 	type = integer,
 	min = 0,
 	max = 100,
-	default = 20,
+	default = 40,
 	page = WDecay_Nature,
 	translation = WDecay_outdoorGrassPercentageOnRoad,
+}
+
+option WDecay.roadGrassNaturalRange
+{
+	type = integer,
+	min = 1,
+	max = 5,
+	default = 2,
+	page = WDecay_Nature,
+	translation = WDecay_roadGrassNaturalRange,
 }
 
 option WDecay.indoorGrassPercentage

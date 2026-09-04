@@ -74,7 +74,7 @@ local cachedBaseRoad = nil
 function WDecay_Grass.getBasePercentageOnRoad()
     if cachedBaseRoad == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.outdoorGrassPercentageOnRoad')
-        cachedBaseRoad = opt and opt:getValue() or 10
+        cachedBaseRoad = opt and opt:getValue() or 40
     end
 
     return cachedBaseRoad

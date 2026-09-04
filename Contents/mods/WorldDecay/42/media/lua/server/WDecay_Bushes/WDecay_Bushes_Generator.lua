@@ -32,7 +32,7 @@ local function LoadGridsquare(square, checkResult, level)
 
     if percentage <= 0 then return end
 
-    local chance = WDecay_Placement.clusterChance(square, "bush", WDecay_Scaling.scaleFor('nature', percentage), 4)
+    local chance = WDecay_Placement.shapeDensityChance(WDecay_Scaling.scaleFor('nature', percentage))
     if chance >= randomizer:random(1, 100) then
         if not WDecay_Placement.isSafe(square) then return false end
         return WDecay_Bushes.spawnBush(square) ~= nil

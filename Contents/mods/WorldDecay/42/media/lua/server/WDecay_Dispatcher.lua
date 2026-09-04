@@ -80,6 +80,7 @@ local FAST_TRAVEL_SPEED_KMH = 30
 local FAST_TRAVEL_BUDGET_MS = 8
 local wasDrivingFast = false
 local FAST_TRAVEL_PRIORITY_RADIUS = 2
+local ROAD_GRASS_NATURAL_RANGE = 2
 
 local SCAN_RADIUS = 15
 
@@ -348,6 +349,7 @@ local function loadDispatcherConfig()
     TIME_BUDGET_MS = getInt('timeBudgetMs', 10)
     FAST_TRAVEL_SPEED_KMH = getInt('fastTravelSpeedKmh', 30)
     FAST_TRAVEL_BUDGET_MS = getInt('fastTravelBudgetMs', 8)
+    ROAD_GRASS_NATURAL_RANGE = math.max(1, math.min(getInt('roadGrassNaturalRange', 2), 5))
     SCAN_INTERVAL_SECONDS = getNumber('scanIntervalSeconds', 2.0)
     SCAN_RADIUS = getInt('scanRadius', 15)
     -- Preserve priority-radius invariants for old or unusual saved settings.
@@ -823,6 +825,100 @@ local function recordUrbanFlag(markerData, checkResult)
     end
 end
 
+local ROAD_GRASS_CLUSTER_RADIUS = 2
+local ROAD_GRASS_CLUSTER_SIZE = 3
+
+local function hasNaturalNeighbor(state, x, y)
+    local roadGrass = state.roadGrass
+    local range = ROAD_GRASS_NATURAL_RANGE
+    local width = 8 + range * 2
+    for dy = -range, range do
+        for dx = -range, range do
+            local nx, ny = x + dx, y + dy
+            if nx >= 0 and nx < 8 and ny >= 0 and ny < 8 then
+                if roadGrass.natural[ny * 8 + nx + 1] then return true end
+            else
+                local haloIndex = (ny + range) * width + nx + range + 1
+                local natural = roadGrass.haloNatural[haloIndex]
+                if natural == nil then
+                    local square = getSquare(state.wx * 8 + nx, state.wy * 8 + ny, 0)
+                    natural = square and square:hasNaturalFloor() == true or false
+                    roadGrass.haloNatural[haloIndex] = natural
+                end
+                if natural then return true end
+            end
+        end
+    end
+    return false
+end
+
+local function prepareRoadGrassPlan(state)
+    local roadGrass = state.roadGrass
+    if roadGrass.plan then return end
+    roadGrass.plan = {}
+    if not WDecay_Features.isEnabled("grass") then return end
+
+    local chance = WDecay_Scaling.scaleFor('nature', WDecay_Grass.getBasePercentageOnRoad())
+    if chance <= 0 then return end
+
+    local candidates = {}
+    for i = 1, #roadGrass.roads do
+        local candidate = roadGrass.roads[i]
+        if hasNaturalNeighbor(state, candidate.x, candidate.y) then
+            candidates[#candidates + 1] = candidate
+        end
+    end
+    local target = math.floor(#candidates * chance / 100 + 0.5)
+    if target <= 0 then return end
+
+    WDecay_Random.reseedForChunk(state.wx, state.wy, 700001)
+    local rng = WDecay_Random.get()
+    for i = #candidates, 2, -1 do
+        local j = rng:random(1, i)
+        candidates[i], candidates[j] = candidates[j], candidates[i]
+    end
+
+    local used, center = {}, 1
+    while #roadGrass.plan < target and center <= #candidates do
+        local source = candidates[center]
+        center = center + 1
+        if not used[source] then
+            used[source] = true
+            roadGrass.plan[#roadGrass.plan + 1] = source
+            for i = 1, #candidates do
+                local candidate = candidates[i]
+                if #roadGrass.plan >= target then break end
+                if not used[candidate]
+                    and math.abs(candidate.x - source.x) <= ROAD_GRASS_CLUSTER_RADIUS
+                    and math.abs(candidate.y - source.y) <= ROAD_GRASS_CLUSTER_RADIUS then
+                    used[candidate] = true
+                    roadGrass.plan[#roadGrass.plan + 1] = candidate
+                    if #roadGrass.plan % ROAD_GRASS_CLUSTER_SIZE == 0 then break end
+                end
+            end
+        end
+    end
+end
+
+local function placeRoadGrassClusters(state, deadline)
+    prepareRoadGrassPlan(state)
+    local roadGrass = state.roadGrass
+    roadGrass.index = roadGrass.index or 1
+    while roadGrass.index <= #roadGrass.plan do
+        if deadline and getTimestampMs() >= deadline then return "pending" end
+        local candidate = roadGrass.plan[roadGrass.index]
+        roadGrass.index = roadGrass.index + 1
+        if not squareHasSprite(candidate.square, { "e_newgrass_", "d_generic_", "d_plants_" }, "grass")
+            and WDecay_Placement.isSafe(candidate.square) then
+            WDecay_Random.reseedForChunk(state.wx, state.wy, 710000 + roadGrass.index)
+            if WDecay_Grass.spawnGrass(candidate.square) then
+                state.markerData["WDecay_placedGrassRoad"] = (state.markerData["WDecay_placedGrassRoad"] or 0) + 1
+            end
+        end
+    end
+    return true
+end
+
 local function runCarryModifier(fn, square, checkResult, level, name)
     if not fn then return true end
     local ok, err = pcall(fn, square, checkResult, level)
@@ -1076,6 +1172,7 @@ local function processChunkSquares(chunk, key, deadline)
             wy = math.floor(markerSquare:getY() / 8),
             markerZ = markerSquare:getZ(),
             markerData = markerData,
+            roadGrass = { natural = {}, haloNatural = {}, roads = {} },
         }
         chunkWork[key] = state
     else
@@ -1120,6 +1217,15 @@ local function processChunkSquares(chunk, key, deadline)
             recordGeneratorTime("reseedForChunk", getTimestampMs() - tReseed)
             local checkResult = cachedSquareCheck(square, state.z)
             if checkResult then
+                if state.z == 0 then
+                    local index = state.y * 8 + state.x + 1
+                    if checkResult.isNatural then state.roadGrass.natural[index] = true end
+                    if checkResult.isRoad and not checkResult.cleaned then
+                        state.roadGrass.roads[#state.roadGrass.roads + 1] = {
+                            square = square, x = state.x, y = state.y,
+                        }
+                    end
+                end
                 -- snapshotObjects/recordNewPlacements each do a full
                 -- getObjects()+getSpecialObjects() scan of the square just
                 -- to diff "what did a generator create" -- since generators
@@ -1159,6 +1265,12 @@ local function processChunkSquares(chunk, key, deadline)
                 state.z = state.z + 1
             end
         end
+    end
+
+    local roadGrassResult = placeRoadGrassClusters(state, deadline)
+    if roadGrassResult == "pending" then
+        WDecay_Scaling.clearRedecayContext()
+        return "pending"
     end
 
     WDecay_Scaling.clearRedecayContext()

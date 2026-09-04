@@ -4,6 +4,8 @@
     "Sandbox_WDecay_UrbanDecay": "World Decay — Разрушение города",
     "Sandbox_WDecay_timeBudgetMs": "Лимит времени (мс)",
     "Sandbox_WDecay_timeBudgetMs_tooltip": "Максимальное количество миллисекунд на кадр для генерации мира. Меньше — стабильнее FPS, но медленнее генерация. Больше — быстрее генерация, но возможны скачки задержки.",
+    "Sandbox_WDecay_roadGrassNaturalRange": "Радиус природной травы у дороги (клетки)",
+    "Sandbox_WDecay_roadGrassNaturalRange_tooltip": "Как далеко дорожная трава может расти от природного грунта. Большие значения достигают дальше от края дороги и выполняют немного больше проверок на чанк.",
     "Sandbox_WDecay_scanIntervalSeconds": "Интервал сканирования (секунды)",
     "Sandbox_WDecay_scanIntervalSeconds_tooltip": "Как часто мод ищет новые чанки вокруг каждого игрока. Меньше — быстрее реакция, но выше нагрузка на процессор.",
     "Sandbox_WDecay_scanRadius": "Радиус сканирования (чанки)",

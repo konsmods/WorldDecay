@@ -36,6 +36,8 @@
     "Sandbox_WDecay_ReadPlease_tooltip":"leia a descrição do mod para detalhes completos das funcionalidades",
     "Sandbox_WDecay_timeBudgetMs":"Limite de Tempo (ms)",
     "Sandbox_WDecay_timeBudgetMs_tooltip":"Prazo máximo de milissegundos por frame para geração do mundo. Menor = FPS mais estável mas geração mais lenta. Maior = geração mais rápida mas possíveis lags.",
+    "Sandbox_WDecay_roadGrassNaturalRange":"Alcance natural da grama na estrada (tiles)",
+    "Sandbox_WDecay_roadGrassNaturalRange_tooltip":"Até onde a grama da estrada pode crescer a partir de terreno natural. Valores maiores alcançam mais longe das bordas e verificam alguns tiles extras por chunk.",
     "Sandbox_WDecay_scanIntervalSeconds":"Intervalo de Varredura (segundos)",
     "Sandbox_WDecay_scanIntervalSeconds_tooltip":"Com que frequência o mod procura novos chunks ao redor de cada jogador. Menor = mais rápido, com maior uso de CPU.",
     "Sandbox_WDecay_scanRadius":"Raio de Varredura (chunks)",

@@ -18,6 +18,11 @@
 
 ## Roadmap / Ideas
 
+- Scheduler performance follow-ups (not implemented)
+  - Resumable center-outward discovery scans, so wide scans are spread across small tick slices.
+  - Discard unfinished scan jobs once a moving player has left their useful area.
+  - During fast travel, bias discovery toward the direction of travel while retaining normal catch-up scans after stopping.
+
 - Clothes Retexture & New Outfits
   - Low-quality, worn-out clothing without relying on vanilla's damage/dirt settings. Think:
   - Faded and sun-bleached colors

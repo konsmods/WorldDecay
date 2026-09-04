@@ -565,6 +565,9 @@ end
 Events.OnServerCommand.Add(function(module, command, data)
     local panel = WDecay_DebugAgePanel.instance
     if module == "WDecayDebug" and command == "Monitor" and panel then panel:setMonitorData(data) end
+    if module == "WDecayDebug" and command == "Age" then
+        WDecay_Scaling.setDebugAgeDays(data and data.hasOverride and data.days or nil)
+    end
 end)
 
 function WDecay_DebugAgePanel:new(x, y, width, height)

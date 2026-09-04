@@ -59,7 +59,7 @@ end
 
 -- Clustering was removed because its neighbor scans dominated placement cost.
 -- The density curve remains as inexpensive chance shaping.
-function WDecay_Placement.clusterChance(square, cleanableType, chance, radius)
+function WDecay_Placement.shapeDensityChance(chance)
     if not chance then return chance end
     if chance > 0 and chance < 100 then
         chance = 100 * (chance / 100) ^ DENSITY_CURVE

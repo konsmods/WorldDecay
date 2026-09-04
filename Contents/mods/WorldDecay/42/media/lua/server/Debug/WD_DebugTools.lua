@@ -1,5 +1,5 @@
 local WDecay_SquareCheck = require('wdecay_squarecheck/wdecay_squarecheck')
-local WD_Logger = require("logging/WD_Logger")
+local WD_Logger = require("Logging/WD_Logger")
 local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WD_Code_Benchmark = require("Debug/WD_Code_Benchmark")
 

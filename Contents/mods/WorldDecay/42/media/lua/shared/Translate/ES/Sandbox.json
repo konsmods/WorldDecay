@@ -43,6 +43,8 @@
     "Sandbox_WDecay_Vehicles": "World Decay - Decadencia de Vehiculos",
     "Sandbox_WDecay_timeBudgetMs": "Presupuesto de tiempo (ms)",
     "Sandbox_WDecay_timeBudgetMs_tooltip": "Milisegundos maximos por frame para generacion de mundo. Mas bajo = FPS mas estables pero generacion mas lenta. Mas alto = generacion mas rapida pero posibles tirones.",
+    "Sandbox_WDecay_roadGrassNaturalRange": "Alcance natural de hierba en carretera (baldosas)",
+    "Sandbox_WDecay_roadGrassNaturalRange_tooltip": "A qué distancia puede crecer la hierba de carretera desde terreno natural. Valores altos llegan más lejos de los bordes y revisan algunos cuadros más por chunk.",
     "Sandbox_WDecay_scanIntervalSeconds": "Intervalo de escaneo (segundos)",
     "Sandbox_WDecay_scanIntervalSeconds_tooltip": "Cada cuánto el mod busca nuevos chunks alrededor de cada jugador. Más bajo = más rápido, pero mayor uso de CPU.",
     "Sandbox_WDecay_scanRadius": "Radio de escaneo (chunks)",

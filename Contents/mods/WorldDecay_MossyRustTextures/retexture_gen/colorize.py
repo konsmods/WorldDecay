@@ -69,8 +69,8 @@ def mossify(src: Path, hue_shift: int = 70, sat_scale: float = 0.75,
     shifted_rgb = np.asarray(Image.merge("HSV", (h, s, v)).convert("RGB"),
                              dtype=np.float32)
     brightness = 0.68 + 0.32 * (source_rgb.mean(axis=2) / 255.0)
-    safe_green = np.stack((40.0 * brightness, 235.0 * brightness,
-                           100.0 * brightness), axis=2)
+    safe_green = np.stack((58.0 * brightness, 205.0 * brightness,
+                           86.0 * brightness), axis=2)
     edge_rgb = safe_green * 0.65 + shifted_rgb * 0.35
     # Darken only the preserved rust core at rust=1; leave the moss edge
     # bright enough to remain visible against dark vehicle paint.
