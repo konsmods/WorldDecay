@@ -77,7 +77,7 @@ local function LoadGridsquare(square, checkResult, level)
 
     if not checkResult then return end
 
-    if checkResult.cleaned and not WDecay_Scaling.isRedecayPass() then return end
+    if checkResult.cleaned then return end
 
     if not checkResult.hasFences then return end
 

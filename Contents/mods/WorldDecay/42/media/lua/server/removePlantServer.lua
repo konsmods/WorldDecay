@@ -190,19 +190,23 @@ local function inspectList(objects, command, result)
     for i = 0, objects:size() - 1 do
         local object = objects:get(i)
 
-        if hasFlag(object, flag) then
-            result.vanilla = true
-        end
+        if not result.seen[object] then
+            result.seen[object] = true
 
-        if matchesTagged(object, command) then
-            result.count = result.count + 1
-            result.object = object
+            if hasFlag(object, flag) then
+                result.vanilla = true
+            end
+
+            if matchesTagged(object, command) then
+                result.count = result.count + 1
+                result.object = object
+            end
         end
     end
 end
 
 local function removeUniqueTagged(square, command)
-    local result = { count = 0, object = nil, vanilla = false }
+    local result = { count = 0, object = nil, vanilla = false, seen = {} }
 
     inspectList(square:getObjects(), command, result)
     inspectList(square:getSpecialObjects(), command, result)

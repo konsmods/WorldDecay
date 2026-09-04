@@ -1,4 +1,15 @@
-[h1]2.2.1 - Pending[/h1]
+[h1]2.3.0[/h1]
+[list]
+[*]Reworked chunk discovery into a timer-driven, high/low priority scheduler with resumable work, stale-queue cleanup, queue caps, and fast-travel backpressure.
+[*]Added normal and fast-travel scheduler controls. Lower budgets smooth frames but delay generation; shorter intervals refresh sooner; scan radius is coverage and priority radius is the near-player bubble. Both modes use the same order, while fast travel also has its speed threshold.
+[*]Added Re-Decay Check Interval (days), which controls how often nearby completed chunks are checked separately from the per-chunk re-decay interval.
+[*]Removed LoadChunk generation discovery; periodic scans are now the reliable generation and re-decay backstop. LoadChunk remains for seasonal visual refreshes.
+[*]Improved debug tools with Status and Map tabs, a context-menu panel entry, and overwrite/forced/timer-respecting regeneration actions.
+[*]Fixed cleanup for WorldDecay special-object vegetation. Player and debug cleaning now remove re-decay vegetation and prevent normal re-decay from restoring cleaned squares.
+[*]Removed costly vegetation clustering scans and made scheduler diagnostics debug-mode only.
+[/list]
+
+[h1]2.2.1[/h1]
 [list]
 [*]Fixed debug-panel status output to include server performance counters.
 [*]Regeneration areas now receive high queue priority, including chunks already queued nearby.

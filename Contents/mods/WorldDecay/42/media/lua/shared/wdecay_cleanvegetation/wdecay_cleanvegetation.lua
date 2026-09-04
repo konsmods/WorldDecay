@@ -142,6 +142,12 @@ function WDecay_CleanVegetation.isCleanableDecorationSpriteName(spriteName)
 end
 
 function WDecay_CleanVegetation.isCleanableMainObject(object)
+    -- The ownership tag is authoritative. Sprite matching remains only for
+    -- older content created before every placement path used this tag.
+    if WDecay_CleanVegetation.getCleanableType(object) then
+        return true
+    end
+
     return WDecay_CleanVegetation.isCleanableMainSpriteName(
         WDecay_CleanVegetation.getObjectSpriteName(object)
     )

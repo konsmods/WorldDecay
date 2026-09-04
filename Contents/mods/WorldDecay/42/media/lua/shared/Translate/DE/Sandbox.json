@@ -40,8 +40,6 @@
     "Sandbox_WDecay_scanInterval_tooltip":"Wie oft der Mod nach neuen Chunks in der Umgebung sucht. Niedriger Wert = Schnelle Reaktion, Höherer Wert = höhere CPU-Auslastung. Im Multiplayer wird der Wert verdoppelt.",
     "Sandbox_WDecay_scanRadius":"Scan Radius (chunks)",
     "Sandbox_WDecay_scanRadius_tooltip":"Wie viele Chunks vom Spieler entfernt für die Verarbeitung gescannt werden. Höher = größerer abgedeckter Bereich, aber mehr Chunks, die gleichzeitig in der Warteschlange stehen.",
-    "Sandbox_WDecay_priorityRadius":"Prioritätsradius (chunks)",
-    "Sandbox_WDecay_priorityRadius_tooltip":"Chunks innerhalb dieser Entfernung zum Spieler werden zuerst mit hoher Priorität verarbeitet.",
     "Sandbox_WDecay_fastTravelSpeedKmh":"Reisegeschwindigkeit (km/h)",
     "Sandbox_WDecay_fastTravelSpeedKmh_tooltip":"Fahrzeuggeschwindigkeit, ab der der Mod auf das reduzierte Zeit-Budget umschaltet, um Ruckler beim Fahren zu verringern. 0 deaktiviert dies.",
     "Sandbox_WDecay_fastTravelBudgetMs":"Zeit-Budget bei schneller Fahrt (ms)",

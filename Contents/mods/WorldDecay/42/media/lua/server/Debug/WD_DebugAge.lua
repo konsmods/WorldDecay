@@ -57,13 +57,11 @@ function WDecay_CleanArea(radius, player)
                     local levelSq = getSquare(x, y, z)
                     if levelSq then
                         WDecay_CleanSquare(levelSq)
-                        levelSq:getModData()["WDecay_cleaned"] = nil
                         cleaned = cleaned + 1
                     end
                 end
             elseif sq then
                 WDecay_CleanSquare(sq)
-                sq:getModData()["WDecay_cleaned"] = nil
                 cleaned = cleaned + 1
             end
         end
@@ -138,6 +136,9 @@ end
 function WDecay_Regen(radius, player)
     radius = tonumber(radius) or 3
     WDecay_CleanArea(radius, player)
+    if WDecay_Dispatcher_ClearCleanedArea then
+        WDecay_Dispatcher_ClearCleanedArea(radius, player)
+    end
     if WDecay_Dispatcher_QueueArea then
         WDecay_Dispatcher_QueueArea(radius, true, player, true)
     end
@@ -147,8 +148,18 @@ end
 
 function WDecay_Redecay(radius, player)
     radius = tonumber(radius) or 3
+    if WDecay_Dispatcher_ClearCleanedArea then
+        WDecay_Dispatcher_ClearCleanedArea(radius, player)
+    end
     if WDecay_Dispatcher_QueueArea then
-        WDecay_Dispatcher_QueueArea(radius, false, player, false)
+        WDecay_Dispatcher_QueueArea(radius, false, player, true)
+    end
+end
+
+function WDecay_TimerRedecay(radius, player)
+    radius = tonumber(radius) or 3
+    if WDecay_Dispatcher_QueueDueRedecayArea then
+        WDecay_Dispatcher_QueueDueRedecayArea(radius, player)
     end
 end
 
@@ -253,4 +264,4 @@ function WDecay_TimelapseToggle(stepDays, intervalTicks, targetDays, radius, pla
     end
 end
 
-print("[WDecay-Debug] Age tools: WDecay_Status() WDecay_SetDays(d) WDecay_AddDays(d) WDecay_ClearDays() WDecay_Regen(r) WDecay_Redecay(r) WDecay_RedecayFrom(r, d) WDecay_CleanArea(r) WDecay_ReapplyOverlays(r) WDecay_Timelapse(step, ticks, target, r) WDecay_TimelapseStop() WDecay_Panel()")
+print("[WDecay-Debug] Age tools: WDecay_Status() WDecay_SetDays(d) WDecay_AddDays(d) WDecay_ClearDays() WDecay_Regen(r) WDecay_Redecay(r) WDecay_TimerRedecay(r) WDecay_RedecayFrom(r, d) WDecay_CleanArea(r) WDecay_ReapplyOverlays(r) WDecay_Timelapse(step, ticks, target, r) WDecay_TimelapseStop() WDecay_Panel()")

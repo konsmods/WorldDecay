@@ -109,8 +109,9 @@ local function reseasonAllLoadedChunks()
     return WDecay_LoadedChunks.forEachLoadedObject(reseasonObject)
 end
 
+-- Offline SP is neither server nor client; only remote clients skip this.
 local function reseasonChunk(chunk)
-    if not isServer() or not chunk or #reseasonCallbacks == 0 then return end
+    if isClient() or not chunk or #reseasonCallbacks == 0 then return end
     if WDecay_DebugCountPass then WDecay_DebugCountPass("seasonal") end
     for z = chunk:getMinLevel(), chunk:getMaxLevel() do
         for cx = 0, CHUNK_SIZE - 1 do

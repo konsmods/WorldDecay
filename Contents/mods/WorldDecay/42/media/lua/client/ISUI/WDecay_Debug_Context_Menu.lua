@@ -8,12 +8,13 @@ local FALLBACK_FLAGS = {
 
 WD_DebugTools = WD_DebugTools or FALLBACK_FLAGS
 
-local DEBUG_TOOLS = "#### - Debug Tools - ####"
+local WDECAY_DEBUG_MENU_LABEL = "WorldDecay Debug"
 local GENERATE_SQUARE = "Generate Square"
 local PRINT_CHECKRESULT = "Show Checkresult"
 local PRINT_OBJECT_INFO = "Show Object Info"
 local PRINT_METRIC = "Metric Info"
 local START_BENCHMARK = "Start Benchmark"
+local OPEN_DECAY_PANEL = "Open Decay Panel"
 local SPAWN_TREE = "Spawn Tree (Debug)"
 local REMOVE_DEBUG_TREES = "Remove Debug Trees Here"
 
@@ -142,6 +143,23 @@ local function onRemoveDebugTrees(worldobjects, square, playerId)
     end
 end
 
+local function addSubMenu(parent, label)
+    local option = parent:addOption(label)
+    local menu = ISContextMenu:getNew(parent)
+    parent:addSubMenu(option, menu)
+    return menu
+end
+
+-- Keep the panel entry independent from tile actions: it only opens the
+-- existing debug window and does not select, queue, or modify this square.
+local function onOpenDecayPanel()
+    if WDecay_Panel then
+        WDecay_Panel()
+    else
+        print("[WorldDecay Debug] Decay panel is not available yet")
+    end
+end
+
 local function addSquareGenCheck(player, context, worldobjects)
     if worldobjects then
         local size = #worldobjects
@@ -160,18 +178,19 @@ local function addSquareGenCheck(player, context, worldobjects)
         end
 
         if square then
-            local subMenuOption = context:addOption(DEBUG_TOOLS)
-            local subMenu = ISContextMenu:getNew(context)
-            context:addSubMenu(subMenuOption, subMenu)
-            subMenu:addOption(GENERATE_SQUARE, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_GENERATE_SQUARE)
-            subMenu:addOption(PRINT_CHECKRESULT, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_PRINT_CHECKRESULT)
-            subMenu:addOption(PRINT_OBJECT_INFO, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_PRINT_OBJECT_INFO)
-            subMenu:addOption(PRINT_METRIC, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_PRINT_METRIC)
-            subMenu:addOption(START_BENCHMARK, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_BENCHMARK)
+            local rootMenu = addSubMenu(context, WDECAY_DEBUG_MENU_LABEL)
+            rootMenu:addOption(OPEN_DECAY_PANEL, nil, onOpenDecayPanel)
+            local squareMenu = addSubMenu(rootMenu, "Square")
+            squareMenu:addOption(GENERATE_SQUARE, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_GENERATE_SQUARE)
+            squareMenu:addOption(PRINT_CHECKRESULT, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_PRINT_CHECKRESULT)
+            squareMenu:addOption(PRINT_OBJECT_INFO, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_PRINT_OBJECT_INFO)
 
-            local spawnTreeOption = subMenu:addOption(SPAWN_TREE)
-            local spawnTreeMenu = ISContextMenu:getNew(subMenu)
-            subMenu:addSubMenu(spawnTreeOption, spawnTreeMenu)
+            local diagnosticsMenu = addSubMenu(rootMenu, "Diagnostics")
+            diagnosticsMenu:addOption(PRINT_METRIC, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_PRINT_METRIC)
+            diagnosticsMenu:addOption(START_BENCHMARK, worldobjects, onSelectSquare, square, player, WD_DebugTools.FLAG_BENCHMARK)
+
+            local treeMenu = addSubMenu(rootMenu, "Trees")
+            local spawnTreeMenu = addSubMenu(treeMenu, SPAWN_TREE)
 
             for _, species in ipairs(DEBUG_TREE_SPECIES) do
                 local speciesOption = spawnTreeMenu:addOption(species)
@@ -200,7 +219,7 @@ local function addSquareGenCheck(player, context, worldobjects)
                 end
             end
 
-            subMenu:addOption(REMOVE_DEBUG_TREES, worldobjects, onRemoveDebugTrees, square, player)
+            treeMenu:addOption(REMOVE_DEBUG_TREES, worldobjects, onRemoveDebugTrees, square, player)
         end
     end
 end

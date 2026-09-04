@@ -47,8 +47,6 @@
     "Sandbox_WDecay_scanInterval_tooltip": "Cada cuantos ticks el mod busca nuevos chunks alrededor del jugador. Mas bajo = mas rapido pero mayor uso de CPU. En Multijugador, este valor se duplica automaticamente.",
     "Sandbox_WDecay_scanRadius": "Radio de escaneo (chunks)",
     "Sandbox_WDecay_scanRadius_tooltip": "Cuantos chunks de distancia desde el jugador se escanean para procesar. Mas alto = mas area cubierta pero mas chunks en cola.",
-    "Sandbox_WDecay_priorityRadius": "Radio de prioridad (chunks)",
-    "Sandbox_WDecay_priorityRadius_tooltip": "Los chunks dentro de esta distancia del jugador se procesan primero con prioridad alta.",
     "Sandbox_WDecay_fastTravelSpeedKmh": "Velocidad de viaje rápido (km/h)",
     "Sandbox_WDecay_fastTravelSpeedKmh_tooltip": "Velocidad del vehículo por encima de la cual el mod usa el Presupuesto de tiempo de viaje rápido para reducir los tirones al conducir. 0 desactiva esto.",
     "Sandbox_WDecay_fastTravelBudgetMs": "Presupuesto de tiempo en viaje rápido (ms)",

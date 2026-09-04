@@ -37,7 +37,8 @@ local function readConfig()
     c.vehiclesFactor = getOpt('WDecay.timeScalingVehiclesFactor', 100)
     c.redecayEnabled = getOpt('WDecay.redecayEnabled', false)
     c.redecayUrbanEnabled = getOpt('WDecay.redecayUrbanEnabled', false)
-    c.redecayThresholdDays = getOpt('WDecay.redecayThresholdDays', 180)
+    c.redecayThresholdDays = getOpt('WDecay.redecayThresholdDays', 1)
+    c.redecayCheckIntervalDays = getOpt('WDecay.redecayCheckIntervalDays', 1)
     c.severityScaling = getOpt('WDecay.severityScalingEnabled', false)
     c.seasonalBias = getOpt('WDecay.seasonalBiasEnabled', false)
     c.erosionDays = getOpt('ErosionDays', 0)
@@ -273,9 +274,15 @@ end
 
 function WDecay_Scaling.getRedecayThresholdDays()
     local c = getConfig()
-    if not c then return 180 end
+    if not c then return 1 end
 
     return c.redecayThresholdDays
+end
+
+function WDecay_Scaling.getRedecayCheckIntervalDays()
+    local c = getConfig()
+    if not c then return 1 end
+    return c.redecayCheckIntervalDays
 end
 
 function WDecay_Scaling.setRedecayContext(doneAtDays)

@@ -4,14 +4,6 @@ local WDecay_Season = require('wdecay_season/wdecay_season')
 
 local SEASONAL_DEBUG_MODULE = "WDecaySeasonalDebug"
 
-local REMOVABLE_MARKER_TYPES = {
-    grass = true,
-    bush = true,
-    trash = true,
-    vine = true,
-    indoorGrass = true
-}
-
 local function markCleaned(square)
     square:getModData()["WDecay_cleaned"] = true
     square:transmitModdata()
@@ -69,22 +61,6 @@ local function removeCleanableDecorations(object)
     return changed
 end
 
-local function isSpecialObject(square, object)
-    local specialObjects = square:getSpecialObjects()
-
-    if not specialObjects then
-        return false
-    end
-
-    for i = 0, specialObjects:size() - 1 do
-        if specialObjects:get(i) == object then
-            return true
-        end
-    end
-
-    return false
-end
-
 local function tryCleanObject(square, object)
     if not object then
         return false
@@ -96,22 +72,12 @@ local function tryCleanObject(square, object)
 
     local changed = removeCleanableDecorations(object)
 
-    if isSpecialObject(square, object) then
-        return changed
-    end
-
-    local modData = object:getModData()
-    local cleanableType = modData and modData["WDecay_Cleanable"]
-
+    -- WorldDecay vegetation is deliberately stored as a special object so it
+    -- replicates correctly. That storage detail must not make it immune to
+    -- the same clean operation as initial-generation vegetation.
     if object ~= square:getFloor() and WDecay_CleanVegetation.isCleanableMainObject(object) then
         square:transmitRemoveItemFromSquare(object)
-
         return true
-    end
-
-    if REMOVABLE_MARKER_TYPES[cleanableType] then
-        modData["WDecay_Cleanable"] = nil
-        object:transmitModData()
     end
 
     return changed
@@ -129,27 +95,22 @@ function WDecay_CleanSquare(square)
         changed = true
     end
 
-    local objects = square:getObjects()
-
-    if objects then
+    local seen = {}
+    local function cleanList(objects)
+        if not objects then return end
         for i = objects:size() - 1, 0, -1 do
-            if tryCleanObject(square, objects:get(i)) then
-                changed = true
+            local object = objects:get(i)
+            if object and not seen[object] then
+                seen[object] = true
+                if tryCleanObject(square, object) then
+                    changed = true
+                end
             end
         end
     end
 
-    local specialObjects = square:getSpecialObjects()
-
-    if specialObjects then
-        for i = specialObjects:size() - 1, 0, -1 do
-            local object = specialObjects:get(i)
-
-            if object and object:getObjectIndex() ~= -1 and tryCleanObject(square, object) then
-                changed = true
-            end
-        end
-    end
+    cleanList(square:getObjects())
+    cleanList(square:getSpecialObjects())
 
     markCleaned(square)
     square:setOverlayDone(true)
@@ -294,11 +255,14 @@ local function onDebugCommand(module, command, player, args)
     elseif action == "status" then
         if WDecay_Status then WDecay_Status() end
         if WDecay_DebugPrintStatus then WDecay_DebugPrintStatus() end
+    elseif action == "monitor" and player and WDecay_Dispatcher_GetMonitorData then
+        sendServerCommand(player, "WDecayDebug", "Monitor", WDecay_Dispatcher_GetMonitorData(player, args.radius))
     elseif action == "setDays" and WDecay_SetDays then WDecay_SetDays(args.days)
     elseif action == "clearDays" and WDecay_ClearDays then WDecay_ClearDays()
     elseif action == "addDays" and WDecay_AddDays then WDecay_AddDays(args.days)
     elseif action == "regen" and WDecay_Regen then WDecay_Regen(args.radius, player)
     elseif action == "redecay" and WDecay_Redecay then WDecay_Redecay(args.radius, player)
+    elseif action == "timerRedecay" and WDecay_TimerRedecay then WDecay_TimerRedecay(args.radius, player)
     elseif action == "clean" and WDecay_CleanArea then WDecay_CleanArea(args.radius, player)
     elseif action == "overlays" and WDecay_ReapplyOverlays then WDecay_ReapplyOverlays(args.radius, player)
     elseif action == "timelapse" and WDecay_TimelapseToggle then WDecay_TimelapseToggle(args.step, args.ticks, args.target, args.radius, player)

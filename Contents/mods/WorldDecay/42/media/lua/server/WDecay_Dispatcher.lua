@@ -10,16 +10,10 @@ local WDecay_Bushes = require('WDecay_Bushes/WDecay_Bushes')
 local WDecay_Grass = require('WDecay_Grass/WDecay_Grass')
 local WDecay_Features = require('wdecay_features/wdecay_features')
 
--- Stamped onto each chunk's own WDecay_done marker. Do NOT bump this for
--- internal cache-format changes (see SCAN_CACHE_VERSION) -- it forces every
--- already-generated chunk in every existing save to be reprocessed. Only
--- bump it when what "done" means for a chunk actually changes.
+-- Bump only when the meaning of a completed chunk changes.
 local CACHE_VERSION = 4
 
--- Versions the persisted "which chunks have we already seen" scan cache
--- (WDecay_ChunkCache) independently of CACHE_VERSION -- wiping this just
--- costs one extra cheap isChunkMarkedDone lookup per chunk, not a
--- reprocess. Bumped when GenerateKey's key format changes.
+-- Version the scan cache independently; changing it never regenerates chunks.
 local SCAN_CACHE_VERSION = 1
 
 local DEBUG_MODE = false
@@ -27,31 +21,31 @@ local DEBUG_MODE = false
 local seenChunks = {}
 local modDataTable = nil
 
+-- One resumable active job per tier. High always runs before low.
 local chunkQueueTailHigh = 0
 local chunkQueueTailLow = 0
 local chunkQueueHeadHigh = 1
 local chunkQueueHeadLow = 1
 local chunkQueueHighChunks = {}
 local chunkQueueHighKeys = {}
-local chunkQueueHighWx = {}
-local chunkQueueHighWy = {}
 local chunkQueueLowChunks = {}
 local chunkQueueLowKeys = {}
-local chunkQueueLowWx = {}
-local chunkQueueLowWy = {}
-local PRIORITY_RADIUS = 5
 local pendingChunks = {}
+
+-- Resumable state for the at most one active chunk in each tier.
 local chunkWork = {}
+local currentHighKey = nil
+local currentHighChunk = nil
+local currentLowKey = nil
+local currentLowChunk = nil
 
--- Retry timing failures five times, then use progressive cooldowns.
+-- Retry transient chunk-readiness failures, then apply a short cooldown.
+local MAX_CHUNK_FAIL_RETRIES = 3
+local CHUNK_FAIL_COOLDOWN_MS = 10000
 local chunkFailAttempts = {}
-local chunkCooldownLevel = {}
-local MAX_CHUNK_FAIL_RETRIES = 5
 local chunkFailCooldownUntilMs = {}
-local CHUNK_FAIL_COOLDOWN_MS = { 60000, 300000, 900000 }
 
--- Tallied, not printed per-chunk -- a print() per failure was console spam
--- during bursts. Flushed with the "Queue:" summary in OnTick.
+-- Report failure bursts with the periodic debug summary.
 local failedCooldownCount = 0
 
 local function chunkFailedTransiently(key, maxRetries)
@@ -62,16 +56,13 @@ local function chunkFailedTransiently(key, maxRetries)
         return "pending"
     end
     chunkFailAttempts[key] = nil
-    local level = math.min((chunkCooldownLevel[key] or 0) + 1, #CHUNK_FAIL_COOLDOWN_MS)
-    chunkCooldownLevel[key] = level
-    chunkFailCooldownUntilMs[key] = getTimestampMs() + CHUNK_FAIL_COOLDOWN_MS[level]
+    chunkFailCooldownUntilMs[key] = getTimestampMs() + CHUNK_FAIL_COOLDOWN_MS
     failedCooldownCount = failedCooldownCount + 1
     return false
 end
 
 local function chunkSucceeded(key)
     chunkFailAttempts[key] = nil
-    chunkCooldownLevel[key] = nil
     chunkFailCooldownUntilMs[key] = nil
 end
 
@@ -82,66 +73,133 @@ end
 
 local TIME_BUDGET_MS = 10
 local FAST_TRAVEL_SPEED_KMH = 30
-local FAST_TRAVEL_BUDGET_MS = 3
+local FAST_TRAVEL_BUDGET_MS = 8
 local wasDrivingFast = false
+-- Tight fast-travel high-priority bubble prevents an unfinishable backlog.
+local FAST_TRAVEL_PRIORITY_RADIUS = 2
+
+local SCAN_RADIUS = 15
+
+-- Keep scan priority smaller than scan coverage so the low tier is useful.
+local SCAN_PRIORITY_RADIUS = 5
+
+local function scanPrioritySqDistThreshold()
+    local radius = wasDrivingFast and FAST_TRAVEL_PRIORITY_RADIUS or SCAN_PRIORITY_RADIUS
+    return radius * radius * 64
+end
+
+-- Fast travel refreshes a small area frequently to avoid wide-scan hitches.
+local FAST_TRAVEL_SCAN_INTERVAL = 25
+local FAST_TRAVEL_SCAN_RADIUS = 4
+
 local SCAN_INTERVAL = 100
 local scanInterval = 100
 local scanIntervalSet = false
-local SCAN_RADIUS = 15
 local scanTimer = 0
 local debugTickCounter = 0
 
--- LoadChunk already queues every chunk as it streams in -- this periodic
--- scan is just a safety net for chunks that loaded before the mod
--- initialized. Back the effective interval off exponentially whenever a
--- cycle queues nothing and no tracked player changed chunks; snap back to
--- base the moment either happens again.
-local SCAN_BACKOFF_MAX_MULTIPLIER = 30
-local scanBackoffMultiplier = 1
-local lastScanChunkX = {}
-local lastScanChunkY = {}
+-- Limit queued work discovered by scans and bootstrap passes.
+local MAX_QUEUE_DEPTH_FOR_SCAN = 60
 
--- Returns true if this is the first time trackKey has been seen, or if it
--- moved to a different chunk since the last time this was called for it.
-local function scanTrackerMoved(trackKey, worldX, worldY)
-    local wx = math.floor(worldX / 8)
-    local wy = math.floor(worldY / 8)
-    local moved = lastScanChunkX[trackKey] ~= wx or lastScanChunkY[trackKey] ~= wy
-    lastScanChunkX[trackKey] = wx
-    lastScanChunkY[trackKey] = wy
-    return moved
+local scanThrottledCount = 0
+local scanRunCount = 0
+local scanMovementSkippedCount = 0
+
+local scanQueuedCount = 0
+
+-- Low work receives a conservative share after high-priority work clears.
+local LOW_BUDGET_FRACTION = 0.7
+
+local function queueDepth()
+    return math.max(0, chunkQueueTailHigh - chunkQueueHeadHigh + 1)
+        + math.max(0, chunkQueueTailLow - chunkQueueHeadLow + 1)
 end
 
--- Used to shrink the tick budget during fast travel, when chunk streaming is heaviest.
-local function isAnyPlayerDrivingFast(thresholdKmh)
+local function highQueueDepth()
+    return math.max(0, chunkQueueTailHigh - chunkQueueHeadHigh + 1)
+end
+
+-- Cap high discovery; skipped chunks are rediscovered by later scans.
+local MAX_HIGH_QUEUE_DEPTH = 30
+
+-- Active player positions, refreshed once per tick.
+local trackedPlayerX = {}
+local trackedPlayerY = {}
+local trackedPlayers = {}
+local trackedPlayerCount = 0
+local trackedPlayerSource = "none"
+local fastTravelVehicleCount = 0
+local fastTravelMaxSpeedKmh = 0
+
+local function refreshTrackedPlayers()
+    trackedPlayerCount = 0
+    trackedPlayerSource = "none"
     local numPlayers = getNumActivePlayers and getNumActivePlayers() or 0
     for i = 0, numPlayers - 1 do
         local player = getSpecificPlayer(i)
-        local vehicle = player and player:getVehicle()
-        if vehicle and vehicle:getCurrentSpeedKmHour() >= thresholdKmh then return true end
+        if player then
+            trackedPlayerCount = trackedPlayerCount + 1
+            trackedPlayers[trackedPlayerCount] = player
+            trackedPlayerX[trackedPlayerCount] = player:getX()
+            trackedPlayerY[trackedPlayerCount] = player:getY()
+            trackedPlayerSource = "local"
+        end
     end
-    if numPlayers == 0 then
+    if trackedPlayerCount == 0 then
         local online = getOnlinePlayers()
         if online and online.size then
             for i = 0, online:size() - 1 do
                 local p = online:get(i)
-                local vehicle = p and p:getVehicle()
-                if vehicle and vehicle:getCurrentSpeedKmHour() >= thresholdKmh then return true end
+                if p then
+                    trackedPlayerCount = trackedPlayerCount + 1
+                    trackedPlayers[trackedPlayerCount] = p
+                    trackedPlayerX[trackedPlayerCount] = p:getX()
+                    trackedPlayerY[trackedPlayerCount] = p:getY()
+                    trackedPlayerSource = "online"
+                end
             end
         end
     end
-    return false
+    -- Offline SP needs player 0 as a fallback.
+    if trackedPlayerCount == 0 and getSpecificPlayer then
+        local player = getSpecificPlayer(0)
+        if player then
+            trackedPlayerCount = 1
+            trackedPlayers[1] = player
+            trackedPlayerX[1] = player:getX()
+            trackedPlayerY[1] = player:getY()
+            trackedPlayerSource = "offline-player-0"
+        end
+    end
+    for i = trackedPlayerCount + 1, #trackedPlayers do trackedPlayers[i] = nil end
 end
 
--- Live player position for queueChunk's priority check (not the frozen spawn point).
-local function currentTrackedPlayerPos()
-    local player = getSpecificPlayer and getSpecificPlayer(0)
-    if not player then
-        local online = getOnlinePlayers()
-        player = online and online.size and online:size() > 0 and online:get(0) or nil
+-- Updates fast-travel status inputs and returns whether the threshold is met.
+local function isAnyPlayerDrivingFast(thresholdKmh)
+    fastTravelVehicleCount = 0
+    fastTravelMaxSpeedKmh = 0
+    for i = 1, trackedPlayerCount do
+        local vehicle = trackedPlayers[i]:getVehicle()
+        if vehicle then
+            fastTravelVehicleCount = fastTravelVehicleCount + 1
+            local speed = vehicle:getCurrentSpeedKmHour() or 0
+            if speed > fastTravelMaxSpeedKmh then fastTravelMaxSpeedKmh = speed end
+        end
     end
-    if not player then return nil, nil end
-    return math.floor(player:getX()), math.floor(player:getY())
+    return fastTravelMaxSpeedKmh >= thresholdKmh
+end
+
+-- Squared distance from a chunk center to its nearest tracked player.
+local function nearestPlayerSqDistToChunk(wx, wy)
+    local cx, cy = wx * 8 + 4, wy * 8 + 4
+    local best = nil
+    for i = 1, trackedPlayerCount do
+        local dx = cx - trackedPlayerX[i]
+        local dy = cy - trackedPlayerY[i]
+        local d = dx * dx + dy * dy
+        if not best or d < best then best = d end
+    end
+    return best
 end
 
 local spawnX = nil
@@ -152,21 +210,18 @@ local MAX_SPAWN_ATTEMPTS = 5
 local SEEN_CHUNKS_MAX = 20000
 local seenChunksCount = 0
 
--- Filtered, index-aligned views of WDecay_PlacementGenerators/
--- WDecay_ModifierGenerators (see buildActiveGeneratorLists) with only the
--- currently-enabled generators. Forward-declared for loadDispatcherConfig.
+-- Enabled generators, preserving their original registry index.
 local activePlacementGenerators = nil
 local activePlacementIndices = nil
 local activeModifierGenerators = nil
 local activeModifierIndices = nil
 local buildActiveGeneratorLists
 
--- OnTick unregisters itself when nothing is active (see loadDispatcherConfig)
--- so an idle mod costs zero per-tick calls. queueChunk/
--- WDecay_Dispatcher_QueueArea re-register it if they ever queue a chunk
--- while it's off.
+-- Unregister while fully idle; queueing re-registers the tick handler.
 local onTickRegistered = true
 local OnTick
+-- Debug area queueing can promote nearby low work.
+local prioritizeQueuedArea
 
 local function ensureOnTickRegistered()
     if onTickRegistered then return end
@@ -190,17 +245,19 @@ local function loadDispatcherConfig()
 
     TIME_BUDGET_MS = getInt('timeBudgetMs', 10)
     FAST_TRAVEL_SPEED_KMH = getInt('fastTravelSpeedKmh', 30)
-    FAST_TRAVEL_BUDGET_MS = getInt('fastTravelBudgetMs', 3)
+    FAST_TRAVEL_BUDGET_MS = getInt('fastTravelBudgetMs', 8)
     SCAN_INTERVAL = getInt('scanInterval', 100)
     SCAN_RADIUS = getInt('scanRadius', 15)
-    PRIORITY_RADIUS = getInt('priorityRadius', 5)
+    -- Preserve priority-radius invariants for old or unusual saved settings.
+    SCAN_PRIORITY_RADIUS = math.min(getInt('scanPriorityRadius', 5), SCAN_RADIUS)
+    FAST_TRAVEL_SCAN_RADIUS = math.min(getInt('fastTravelScanRadius', 4), SCAN_RADIUS)
+    FAST_TRAVEL_PRIORITY_RADIUS = math.min(getInt('fastTravelPriorityRadius', 2), FAST_TRAVEL_SCAN_RADIUS)
+    FAST_TRAVEL_SCAN_INTERVAL = getInt('fastTravelScanInterval', 25)
     DEBUG_MODE = getBool('debugMode', false)
     buildActiveGeneratorLists()
     dispatcherConfigLoaded = true
 
-    -- Nothing active to generate, reseason, or overlay at all. Safe to
-    -- Remove from inside OnTick's own first invocation -- only affects
-    -- future ticks.
+    -- No active work: remove future idle ticks.
     if onTickRegistered and #activePlacementGenerators == 0 and #activeModifierGenerators == 0
         and not WDecay_Features.isEnabled("overlays") and not WDecay_Scaling.isSeasonalBiasEnabled() then
         onTickRegistered = false
@@ -244,6 +301,15 @@ local function markSeen(key)
     if modDataTable then modDataTable[key] = true end
 end
 
+-- Per-feature timing for the debug Status tab.
+local generatorTimeMs = {}
+local generatorCallCount = {}
+
+local function recordGeneratorTime(name, deltaMs)
+    generatorTimeMs[name] = (generatorTimeMs[name] or 0) + deltaMs
+    generatorCallCount[name] = (generatorCallCount[name] or 0) + 1
+end
+
 local function runGenerator(fn, square, checkResult, level, category, index)
     local ok, result = pcall(fn, square, checkResult, level)
     if not ok then
@@ -253,12 +319,7 @@ local function runGenerator(fn, square, checkResult, level, category, index)
     return true, result == true
 end
 
--- Each *GeneratorFeatures[i] (set alongside WDecay_*Generators[i] at
--- registration) names the feature gating that generator. Filters to just
--- the enabled ones so dispatchGenerators never calls a disabled generator
--- at all. Original indices are kept alongside so error messages and
--- WDecay_DebugCount*, which are indexed against the unfiltered arrays,
--- still line up.
+-- Filter disabled generators while retaining their registry index.
 function buildActiveGeneratorLists()
     activePlacementGenerators = {}
     activePlacementIndices = {}
@@ -288,15 +349,17 @@ function buildActiveGeneratorLists()
     end
 end
 
--- Debug path: one pcall per generator per square, same as before, so an
--- error is attributed to the exact generator/square/index that threw it.
+-- Debug mode isolates generator errors by square and generator.
 local function dispatchGeneratorsChecked(square, checkResult, level)
     local allSucceeded = true
     if activePlacementGenerators then
         for n = 1, #activePlacementGenerators do
             local fn = activePlacementGenerators[n]
             local origIndex = activePlacementIndices[n]
+            local name = (WDecay_PlacementGeneratorFeatures and WDecay_PlacementGeneratorFeatures[origIndex]) or ("placement#" .. origIndex)
+            local t0 = getTimestampMs()
             local ok, placed = runGenerator(fn, square, checkResult, level, "placement", origIndex)
+            recordGeneratorTime(name, getTimestampMs() - t0)
             if not ok then allSucceeded = false end
             if placed then
                 if WDecay_DebugCountPlacement then WDecay_DebugCountPlacement(origIndex) end
@@ -308,31 +371,39 @@ local function dispatchGeneratorsChecked(square, checkResult, level)
         for n = 1, #activeModifierGenerators do
             local fn = activeModifierGenerators[n]
             local origIndex = activeModifierIndices[n]
+            local name = (WDecay_ModifierGeneratorFeatures and WDecay_ModifierGeneratorFeatures[origIndex]) or ("modifier#" .. origIndex)
+            local t0 = getTimestampMs()
             local ok = runGenerator(fn, square, checkResult, level, "modifier", origIndex)
+            recordGeneratorTime(name, getTimestampMs() - t0)
             if not ok then allSucceeded = false end
         end
     end
     return allSucceeded
 end
 
--- Release path: no per-generator pcall. runQueuedChunk's own pcall around
--- the whole chunk still catches a throw -- it just aborts the rest of that
--- chunk for this tick instead of being logged generator-by-generator, and
--- the chunk gets reprocessed next time it's queued either way. debugMode
--- trades this back for precise per-generator error attribution.
+-- Release mode avoids per-generator pcall; the chunk-level guard still catches errors.
 local function dispatchGeneratorsFast(square, checkResult, level)
     if activePlacementGenerators then
         for n = 1, #activePlacementGenerators do
             local fn = activePlacementGenerators[n]
-            if fn(square, checkResult, level) then
-                if WDecay_DebugCountPlacement then WDecay_DebugCountPlacement(activePlacementIndices[n]) end
+            local origIndex = activePlacementIndices[n]
+            local name = (WDecay_PlacementGeneratorFeatures and WDecay_PlacementGeneratorFeatures[origIndex]) or ("placement#" .. origIndex)
+            local t0 = getTimestampMs()
+            local placed = fn(square, checkResult, level)
+            recordGeneratorTime(name, getTimestampMs() - t0)
+            if placed then
+                if WDecay_DebugCountPlacement then WDecay_DebugCountPlacement(origIndex) end
                 break
             end
         end
     end
     if activeModifierGenerators then
         for n = 1, #activeModifierGenerators do
+            local origIndex = activeModifierIndices[n]
+            local name = (WDecay_ModifierGeneratorFeatures and WDecay_ModifierGeneratorFeatures[origIndex]) or ("modifier#" .. origIndex)
+            local t0 = getTimestampMs()
             activeModifierGenerators[n](square, checkResult, level)
+            recordGeneratorTime(name, getTimestampMs() - t0)
         end
     end
     return true
@@ -380,7 +451,16 @@ end
 local WDecay_SquareCheck = require('wdecay_squarecheck/wdecay_squarecheck')
 local WDecay_LoadedChunks = require('wdecay_loaded_chunks/wdecay_loaded_chunks')
 
-local cachedSquareCheck = WDecay_SquareCheck.checkAll
+-- Timed square classification used by performance diagnostics.
+local squareCheckTimeMs = 0
+local squareCheckCallCount = 0
+local function cachedSquareCheck(square, level)
+    local t0 = getTimestampMs()
+    local result = WDecay_SquareCheck.checkAll(square, level)
+    squareCheckTimeMs = squareCheckTimeMs + (getTimestampMs() - t0)
+    squareCheckCallCount = squareCheckCallCount + 1
+    return result
+end
 
 local getMarkerSquare = WDecay_LoadedChunks.getMarkerSquare
 
@@ -449,7 +529,7 @@ local carryCategories = {
         carryKey = "WDecay_carryTreesNatural",
         placedKey = "WDecay_placedTreesNatural",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass()) and checkResult.isNatural == true
+            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
         end,
         hasExisting = function(square, objects)
             return squareHasSprite(square, WDecay_Trees.getSpritePrefixes(), "tree", objects)
@@ -472,7 +552,7 @@ local carryCategories = {
         carryKey = "WDecay_carryTreesRoad",
         placedKey = "WDecay_placedTreesRoad",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass())
+            return level == 0 and checkResult and not checkResult.cleaned
                 and checkResult.isRoad == true and WDecay_Trees.getBasePercentageOnRoad() > 0
         end,
         hasExisting = function(square, objects)
@@ -496,7 +576,7 @@ local carryCategories = {
         carryKey = "WDecay_carryBushesNatural",
         placedKey = "WDecay_placedBushesNatural",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass()) and checkResult.isNatural == true
+            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
         end,
         basePercent = function() return WDecay_Bushes.getBasePercentage() end,
         hasExisting = function(square, objects)
@@ -514,7 +594,7 @@ local carryCategories = {
         carryKey = "WDecay_carryBushesRoad",
         placedKey = "WDecay_placedBushesRoad",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass())
+            return level == 0 and checkResult and not checkResult.cleaned
                 and checkResult.isRoad == true and WDecay_Bushes.getBasePercentageOnRoad() > 0
         end,
         basePercent = function() return WDecay_Bushes.getBasePercentageOnRoad() end,
@@ -534,7 +614,7 @@ local carryCategories = {
         placedKey = "WDecay_placedBushesIndoor",
         scanAllLevels = true,
         eligible = function(checkResult, level)
-            if not checkResult or (checkResult.cleaned and not WDecay_Scaling.isRedecayPass()) then return false end
+            if not checkResult or checkResult.cleaned then return false end
             if level ~= 0 then return checkResult.hasRoof == true and checkResult.isIndoor == true end
             return checkResult.isIndoor == true and WDecay_Bushes.getIndoorBasePercentage() > 0
         end,
@@ -554,7 +634,7 @@ local carryCategories = {
         carryKey = "WDecay_carryGrassNatural",
         placedKey = "WDecay_placedGrassNatural",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass()) and checkResult.isNatural == true
+            return level == 0 and checkResult and not checkResult.cleaned and checkResult.isNatural == true
         end,
         basePercent = function() return WDecay_Grass.getBasePercentage() end,
         hasExisting = function(square, objects)
@@ -572,7 +652,7 @@ local carryCategories = {
         carryKey = "WDecay_carryGrassRoad",
         placedKey = "WDecay_placedGrassRoad",
         eligible = function(checkResult, level)
-            return level == 0 and checkResult and (not checkResult.cleaned or WDecay_Scaling.isRedecayPass())
+            return level == 0 and checkResult and not checkResult.cleaned
                 and checkResult.isRoad == true and WDecay_Grass.getBasePercentageOnRoad() > 0
         end,
         basePercent = function() return WDecay_Grass.getBasePercentageOnRoad() end,
@@ -592,7 +672,7 @@ local carryCategories = {
         placedKey = "WDecay_placedGrassIndoor",
         scanAllLevels = true,
         eligible = function(checkResult, level)
-            if not checkResult or (checkResult.cleaned and not WDecay_Scaling.isRedecayPass()) then return false end
+            if not checkResult or checkResult.cleaned then return false end
             if level ~= 0 then return checkResult.hasRoof == true and checkResult.isIndoor == true end
             return checkResult.isGoodSquare == true and checkResult.isIndoor == true
                 and WDecay_Grass.getIndoorBasePercentage() > 0
@@ -840,10 +920,21 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
     return true
 end
 
+-- IsoChunk lacks Lua wx/wy fields; derive coordinates from a grid square.
+local function chunkWorldCoords(chunk)
+    local refSquare = chunk:getGridSquare(0, 0, chunk:getMinLevel())
+    if not refSquare then return nil, nil end
+    return math.floor(refSquare:getX() / 8), math.floor(refSquare:getY() / 8)
+end
+
 local function processChunkSquares(chunk, key, deadline)
     local activeState = chunkWork[key]
-    local wx = activeState and activeState.wx or chunk.wx
-    local wy = activeState and activeState.wy or chunk.wy
+    local wx, wy
+    if activeState then
+        wx, wy = activeState.wx, activeState.wy
+    else
+        wx, wy = chunkWorldCoords(chunk)
+    end
     if wx ~= nil and wy ~= nil and isSafehouseChunk(wx, wy) then
         chunkWork[key] = nil
         WDecay_Scaling.clearRedecayContext()
@@ -883,21 +974,29 @@ local function processChunkSquares(chunk, key, deadline)
             wy = math.floor(markerSquare:getY() / 8),
             markerZ = markerSquare:getZ(),
             markerData = markerData,
-            startedAt = DEBUG_MODE and getTimestampMs() or 0
         }
         chunkWork[key] = state
     else
-        local markerSquare = chunk:getGridSquare(0, 0, state.markerZ)
-        if chunk.wx ~= state.wx or chunk.wy ~= state.wy or not markerSquare or not markerSquare:getChunk()
-            or math.floor(markerSquare:getX() / 8) ~= state.wx or math.floor(markerSquare:getY() / 8) ~= state.wy
-            or markerSquare:getModData() ~= state.markerData then
-            -- Chunk unloaded before we could resume it; only a fresh
-            -- LoadChunk can bring it back, so don't keep retrying.
+        -- IsoChunk objects can be reassigned while streaming; resolve by key.
+        local freshSquare = getSquare(state.wx * 8, state.wy * 8, state.markerZ)
+        local freshChunk = freshSquare and freshSquare:getChunk()
+        local invalidReason = nil
+        if not freshChunk then
+            invalidReason = "target chunk (" .. state.wx .. "," .. state.wy .. ") is no longer loaded"
+        elseif freshSquare:getModData() ~= state.markerData then
+            -- Not just a different pooled object -- the chunk actually
+            -- unloaded and reloaded, so our accumulated eligibility/carry
+            -- counters live in a ModData table nobody will read back.
+            invalidReason = "marker ModData identity changed (chunk was unloaded/reloaded)"
+        end
+        if invalidReason then
+            print("[WDecay] Chunk " .. key .. " resume invalidated: " .. invalidReason)
             chunkWork[key] = nil
             return chunkFailedTransiently(key, 1)
         end
+        chunk = freshChunk
         if state.mode == "carry" then
-            return processChunkCarry(chunk, key, markerSquare, state.markerData, state.doneAtDays, deadline)
+            return processChunkCarry(chunk, key, freshSquare, state.markerData, state.doneAtDays, deadline)
         end
     end
 
@@ -914,15 +1013,39 @@ local function processChunkSquares(chunk, key, deadline)
         local square = chunk:getGridSquare(state.x, state.y, state.z)
         if square then
             local salt = (state.z - state.minLevel) * 64 + state.y * 8 + state.x
+            local tReseed = getTimestampMs()
             WDecay_Random.reseedForChunk(state.wx, state.wy, salt)
+            recordGeneratorTime("reseedForChunk", getTimestampMs() - tReseed)
             local checkResult = cachedSquareCheck(square, state.z)
             if checkResult then
+                -- snapshotObjects/recordNewPlacements each do a full
+                -- getObjects()+getSpecialObjects() scan of the square just
+                -- to diff "what did a generator create" -- since generators
+                -- only ever returned true/false, never the object itself.
+                -- Measuring both separately (not folded into "generators")
+                -- to see whether that diffing overhead, paid on every
+                -- square regardless of whether anything got placed, is
+                -- worth replacing with generators reporting what they made.
+                local tSnap = getTimestampMs()
                 local existingObjects = snapshotObjects(square)
+                recordGeneratorTime("snapshotObjects", getTimestampMs() - tSnap)
+
+                local tElig = getTimestampMs()
                 recordEligibility(state.markerData, checkResult, state.z)
                 recordUrbanFlag(state.markerData, checkResult)
+                recordGeneratorTime("eligibility+urban", getTimestampMs() - tElig)
+
                 if not dispatchGenerators(square, checkResult, state.z) then state.failed = true end
+
+                local tNew = getTimestampMs()
                 recordNewPlacements(state.markerData, square, checkResult, existingObjects)
-                if WDecay_Overlays_ReconcileSquare then WDecay_Overlays_ReconcileSquare(square, checkResult, state.z) end
+                recordGeneratorTime("recordNewPlacements", getTimestampMs() - tNew)
+
+                if WDecay_Overlays_ReconcileSquare then
+                    local t0 = getTimestampMs()
+                    WDecay_Overlays_ReconcileSquare(square, checkResult, state.z)
+                    recordGeneratorTime("overlays", getTimestampMs() - t0)
+                end
             end
         end
         state.x = state.x + 1
@@ -948,10 +1071,9 @@ local function processChunkSquares(chunk, key, deadline)
     if WDecay_Debug and WDecay_Debug.totalChunksProcessed then
         WDecay_Debug.totalChunksProcessed = WDecay_Debug.totalChunksProcessed + 1
     end
-    if DEBUG_MODE and WDecay_Debug and WDecay_Debug.totalChunkTimeMs then
-        WDecay_Debug.totalChunkTimeMs = WDecay_Debug.totalChunkTimeMs + getTimestampMs() - state.startedAt
-        WDecay_Debug.totalTimedChunks = (WDecay_Debug.totalTimedChunks or 0) + 1
-    end
+    -- totalChunkTimeMs/totalTimedChunks are now tracked in runOneChunk as
+    -- accumulated *active* processing time (see there for why) instead of
+    -- wall-clock start-to-finish here.
     if WDecay_DebugCountPass then WDecay_DebugCountPass("initial") end
     return true
 end
@@ -973,129 +1095,119 @@ local function enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
     local chunk = sq:getChunk()
     if not chunk then return 0 end
 
-    pendingChunks[key] = true
-    if WDecay_Debug then WDecay_Debug.queueAdded = (WDecay_Debug.queueAdded or 0) + 1 end
     local dx = (wx * 8 + 4) - worldX
     local dy = (wy * 8 + 4) - worldY
     local sqDistance = dx * dx + dy * dy
-    local isPriority = sqDistance <= PRIORITY_RADIUS * PRIORITY_RADIUS * 64
+    local isPriority = sqDistance <= scanPrioritySqDistThreshold()
+
+    -- Don't bother queuing far chunks while driving fast: the fixed
+    -- fast-travel budget can't keep up with discovery at speed, so anything
+    -- queued now will still be well "behind" the player by the time its
+    -- turn comes (see FAST_TRAVEL_PRIORITY_RADIUS above). Leave it
+    -- unmarked (not seen, not pending) so a later scan re-evaluates it
+    -- fresh once the player is actually close or has stopped -- at which
+    -- point it's simply "near" again, not stale backlog.
+    if not isPriority and wasDrivingFast then
+        return 0
+    end
+
+    -- The outer scan guard only tells us the queue was shallow *before* an
+    -- entire ring walk began. Enforce the low-tier cap here as well: a
+    -- radius-15 scan used to add hundreds of low entries in one pass despite
+    -- MAX_QUEUE_DEPTH_FOR_SCAN being 60.
+    if not isPriority and queueDepth() >= MAX_QUEUE_DEPTH_FOR_SCAN then
+        return 0
+    end
+
+    -- See MAX_HIGH_QUEUE_DEPTH above: discovery can outpace processing
+    -- regardless of whether "fast travel" itself is engaged.
+    if isPriority and highQueueDepth() >= MAX_HIGH_QUEUE_DEPTH then
+        return 0
+    end
+
+    pendingChunks[key] = true
+    scanQueuedCount = scanQueuedCount + 1
+    if WDecay_Debug then WDecay_Debug.queueAdded = (WDecay_Debug.queueAdded or 0) + 1 end
     if isPriority then
         chunkQueueTailHigh = chunkQueueTailHigh + 1
         chunkQueueHighChunks[chunkQueueTailHigh] = chunk
         chunkQueueHighKeys[chunkQueueTailHigh] = key
-        chunkQueueHighWx[chunkQueueTailHigh] = wx
-        chunkQueueHighWy[chunkQueueTailHigh] = wy
     else
         chunkQueueTailLow = chunkQueueTailLow + 1
         chunkQueueLowChunks[chunkQueueTailLow] = chunk
         chunkQueueLowKeys[chunkQueueTailLow] = key
-        chunkQueueLowWx[chunkQueueTailLow] = wx
-        chunkQueueLowWy[chunkQueueTailLow] = wy
     end
 
     return 1
 end
 
--- Returns how many chunks this pass queued -- feeds the scan-interval
--- backoff in OnTick (0 queued means nothing new to find right now).
-local function ScanChunksAroundPos(worldX, worldY, radius)
-    if not modDataTable then return 0 end
+-- Visits (cx,cy) first, then each expanding Chebyshev-distance ring around it
+-- (the 8 neighbours at r=1, the 16 at r=2, ...) instead of row-major order,
+-- so callers that enqueue as they visit naturally queue closest-first --
+-- like a spiral expanding outward from the origin.
+local function forEachCellInRings(cx, cy, radius, fn)
+    fn(cx, cy)
+    for r = 1, radius do
+        local xMin, xMax = cx - r, cx + r
+        local yMin, yMax = cy - r, cy + r
+        for x = xMin, xMax do
+            fn(x, yMin)
+            fn(x, yMax)
+        end
+        for y = yMin + 1, yMax - 1 do
+            fn(xMin, y)
+            fn(xMax, y)
+        end
+    end
+end
 
-    local cx0 = math.floor((worldX - radius * 8) / 8)
-    local cx1 = math.floor((worldX + radius * 8) / 8)
-    local cy0 = math.floor((worldY - radius * 8) / 8)
-    local cy1 = math.floor((worldY + radius * 8) / 8)
+-- Scans initial work every pass; completed chunks only get redecay-checked
+-- when the caller's day-based gate is due.
+local function ScanChunksAroundPos(worldX, worldY, radius, checkRedecay)
+    if not modDataTable then return 0, false end
+
+    local cx = math.floor(worldX / 8)
+    local cy = math.floor(worldY / 8)
     local queued = 0
-    local scanDays = WDecay_Scaling.getWorldAgeDays()
-    local redecayEnabled = WDecay_Scaling.isRedecayEnabled()
-    for wx = cx0, cx1 do
-        for wy = cy0, cy1 do
-            local key = GenerateKey(wx, wy)
-            if isSafehouseChunk(wx, wy) then
-            elseif pendingChunks[key] or isChunkInFailCooldown(key) then
-            elseif seenChunks[key] and redecayEnabled then
-                local sq = getSquare(wx * 8, wy * 8, 0)
-                if sq and isChunkMarkedDone(sq) and needsRedecay(sq, scanDays) then
-                    seenChunks[key] = nil
-                    seenChunksCount = seenChunksCount - 1
-                    queued = queued + enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
-                end
-            elseif not seenChunks[key] then
-                local sq = getSquare(wx * 8, wy * 8, 0)
-                if sq then
-                    local marked = isChunkMarkedDone(sq)
-                    local redecay = marked and needsRedecay(sq, scanDays)
-                    if marked and not redecay then
-                        if not redecayEnabled then
-                            markSeen(key)
-                        end
-                    else
+    local scanDays = checkRedecay and WDecay_Scaling.getWorldAgeDays() or nil
+
+    local function visit(wx, wy)
+        local key = GenerateKey(wx, wy)
+        if isSafehouseChunk(wx, wy) then
+        elseif pendingChunks[key] or isChunkInFailCooldown(key) then
+        elseif seenChunks[key] and checkRedecay then
+            local sq = getSquare(wx * 8, wy * 8, 0)
+            if sq and isChunkMarkedDone(sq) and needsRedecay(sq, scanDays) then
+                seenChunks[key] = nil
+                seenChunksCount = seenChunksCount - 1
+                queued = queued + enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
+            end
+        elseif not seenChunks[key] then
+            local sq = getSquare(wx * 8, wy * 8, 0)
+            if sq then
+                local marked = isChunkMarkedDone(sq)
+                if marked then
+                    markSeen(key)
+                    if checkRedecay and needsRedecay(sq, scanDays) then
+                        seenChunks[key] = nil
+                        seenChunksCount = seenChunksCount - 1
                         queued = queued + enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
                     end
+                else
+                    queued = queued + enqueueScannedChunk(key, sq, wx, wy, worldX, worldY)
                 end
             end
         end
     end
 
+    forEachCellInRings(cx, cy, radius, visit)
+
     if DEBUG_MODE and queued > 0 then
         print("[WDecay] Scan queued " .. queued .. " chunks around " .. worldX .. "," .. worldY)
     end
 
-    return queued
-end
-
-local function queueChunk(chunk)
-    local wx = chunk.wx
-    local wy = chunk.wy
-    if wx == nil or wy == nil then
-        local refSquare = chunk:getGridSquare(0, 0, chunk:getMinLevel())
-        if refSquare then
-            wx = math.floor(refSquare:getX() / 8)
-            wy = math.floor(refSquare:getY() / 8)
-        else
-            return
-        end
-    end
-
-    if isSafehouseChunk(wx, wy) then return end
-    local key = GenerateKey(wx, wy)
-    if seenChunks[key] or pendingChunks[key] or isChunkInFailCooldown(key) then return end
-
-    local markerSquare = getMarkerSquare(chunk)
-    local marked = isChunkMarkedDone(markerSquare)
-    local redecay = marked and needsRedecay(markerSquare)
-    if marked and not redecay then
-        if not WDecay_Scaling.isRedecayEnabled() then
-            markSeen(key)
-        end
-        return
-    end
-
-    ensureOnTickRegistered()
-    pendingChunks[key] = true
-    if WDecay_Debug then WDecay_Debug.queueAdded = (WDecay_Debug.queueAdded or 0) + 1 end
-    local targetDist = 999999
-    local cx, cy = wx * 8 + 4, wy * 8 + 4
-    local px, py = currentTrackedPlayerPos()
-    if px and py then
-        local dx = cx - px
-        local dy = cy - py
-        targetDist = dx * dx + dy * dy
-    end
-
-    if targetDist <= PRIORITY_RADIUS * PRIORITY_RADIUS * 64 then
-        chunkQueueTailHigh = chunkQueueTailHigh + 1
-        chunkQueueHighChunks[chunkQueueTailHigh] = chunk
-        chunkQueueHighKeys[chunkQueueTailHigh] = key
-        chunkQueueHighWx[chunkQueueTailHigh] = wx
-        chunkQueueHighWy[chunkQueueTailHigh] = wy
-    else
-        chunkQueueTailLow = chunkQueueTailLow + 1
-        chunkQueueLowChunks[chunkQueueTailLow] = chunk
-        chunkQueueLowKeys[chunkQueueTailLow] = key
-        chunkQueueLowWx[chunkQueueTailLow] = wx
-        chunkQueueLowWy[chunkQueueTailLow] = wy
-    end
+    local complete = queueDepth() < MAX_QUEUE_DEPTH_FOR_SCAN and highQueueDepth() < MAX_HIGH_QUEUE_DEPTH
+    return queued, complete
 end
 
 local function initModDataCache()
@@ -1140,80 +1252,231 @@ local function initModDataCache()
     end
 
     WDecay_Random.setWorldSalt(modDataTable._seed)
-    scanTimer = scanInterval
+    -- Forces the spawn bootstrap's first attempt to fire on the next
+    -- opportunity instead of waiting a full SCAN_INTERVAL.
+    scanTimer = SCAN_INTERVAL
 end
 
-local function requeueChunkWork(chunk, key, wx, wy, lowPriority)
-    if WDecay_Debug then WDecay_Debug.queueRequeued = (WDecay_Debug.queueRequeued or 0) + 1 end
-    if lowPriority then
-        chunkQueueTailLow = chunkQueueTailLow + 1
-        chunkQueueLowChunks[chunkQueueTailLow] = chunk
-        chunkQueueLowKeys[chunkQueueTailLow] = key
-        chunkQueueLowWx[chunkQueueTailLow] = wx
-        chunkQueueLowWy[chunkQueueTailLow] = wy
-    else
-        chunkQueueTailHigh = chunkQueueTailHigh + 1
-        chunkQueueHighChunks[chunkQueueTailHigh] = chunk
-        chunkQueueHighKeys[chunkQueueTailHigh] = key
-        chunkQueueHighWx[chunkQueueTailHigh] = wx
-        chunkQueueHighWy[chunkQueueTailHigh] = wy
-    end
-end
+-- Runs one resumable chunk pass and records active (not waiting) time.
+local activeMsByKey = {}
 
-local function runQueuedChunk(chunk, key, wx, wy, lowPriority, deadline)
-    if not chunk or not pendingChunks[key] then return end
-    -- ponytail: wx/wy captured at enqueue time; IsoChunk proxy may reset across ticks
+local function runOneChunk(key, chunk, deadline)
+    local t0 = getTimestampMs()
     local ok, result = pcall(processChunkSquares, chunk, key, deadline)
+    activeMsByKey[key] = (activeMsByKey[key] or 0) + (getTimestampMs() - t0)
+
     if not ok then
         WDecay_Scaling.clearRedecayContext()
         pendingChunks[key] = nil
         chunkWork[key] = nil
+        activeMsByKey[key] = nil
         if WDecay_DebugCountChunk then WDecay_DebugCountChunk(false) end
         if WDecay_Debug then WDecay_Debug.queueFailed = (WDecay_Debug.queueFailed or 0) + 1 end
         print("[WDecay] Chunk " .. key .. " error: " .. tostring(result):sub(1, 120))
+        return nil
     elseif result == "pending" then
-        requeueChunkWork(chunk, key, wx, wy, lowPriority)
-    else
-        pendingChunks[key] = nil
-        if result ~= "protected" and WDecay_DebugCountChunk then WDecay_DebugCountChunk(result == true) end
-        if result == false and WDecay_Debug then WDecay_Debug.queueFailed = (WDecay_Debug.queueFailed or 0) + 1 end
-        if WDecay_Debug then WDecay_Debug.queueCompleted = (WDecay_Debug.queueCompleted or 0) + 1 end
-        if result then markSeen(key) end
+        return "pending" -- keep accumulating activeMsByKey[key] on the next call
+    end
+
+    if WDecay_Debug and result ~= "protected" then
+        WDecay_Debug.totalChunkTimeMs = (WDecay_Debug.totalChunkTimeMs or 0) + activeMsByKey[key]
+        WDecay_Debug.totalTimedChunks = (WDecay_Debug.totalTimedChunks or 0) + 1
+    end
+    activeMsByKey[key] = nil
+
+    pendingChunks[key] = nil
+    if result ~= "protected" and WDecay_DebugCountChunk then WDecay_DebugCountChunk(result == true) end
+    if result == false and WDecay_Debug then WDecay_Debug.queueFailed = (WDecay_Debug.queueFailed or 0) + 1 end
+    if WDecay_Debug then WDecay_Debug.queueCompleted = (WDecay_Debug.queueCompleted or 0) + 1 end
+    if result then markSeen(key) end
+    return nil
+end
+
+-- Drop stale high work and choose the nearest remaining chunk.
+local function popNextHigh()
+    -- Scan results arrive in ring order, not nearest-first order.
+    -- With at most MAX_HIGH_QUEUE_DEPTH entries, compact stale entries and
+    -- select the nearest remaining chunk here instead of trusting FIFO.
+    local head, tail = chunkQueueHeadHigh, chunkQueueTailHigh
+    local write, bestIndex, bestDist = head, nil, nil
+    local threshold = scanPrioritySqDistThreshold()
+
+    for i = head, tail do
+        local chunk, key = chunkQueueHighChunks[i], chunkQueueHighKeys[i]
+        local wx, wy = chunkWorldCoords(chunk)
+        local dist = wx and nearestPlayerSqDistToChunk(wx, wy)
+        if dist and dist > threshold then
+            pendingChunks[key] = nil
+        else
+            chunkQueueHighChunks[write] = chunk
+            chunkQueueHighKeys[write] = key
+            -- An unresolvable pooled chunk is retained as a last resort;
+            -- normally all entries have coordinates and sort by distance.
+            local candidateDist = dist or math.huge
+            if not bestIndex or candidateDist < bestDist then
+                bestIndex, bestDist = write, candidateDist
+            end
+            write = write + 1
+        end
+    end
+    for i = write, tail do
+        chunkQueueHighChunks[i] = nil
+        chunkQueueHighKeys[i] = nil
+    end
+    chunkQueueTailHigh = write - 1
+    if not bestIndex then return nil, nil end
+
+    local chunk, key = chunkQueueHighChunks[bestIndex], chunkQueueHighKeys[bestIndex]
+    local last = chunkQueueTailHigh
+    if bestIndex ~= last then
+        chunkQueueHighChunks[bestIndex] = chunkQueueHighChunks[last]
+        chunkQueueHighKeys[bestIndex] = chunkQueueHighKeys[last]
+    end
+    chunkQueueHighChunks[last] = nil
+    chunkQueueHighKeys[last] = nil
+    chunkQueueTailHigh = last - 1
+    return chunk, key
+end
+
+-- Drains the high queue up to highDeadline, working currentHighKey (a
+-- chunk paused mid-scan from a previous tick, if any) to completion first.
+-- Returns true if high still has outstanding work when it stops (ran out
+-- of budget, or a chunk mid-scan) -- callers use this to decide whether low
+-- gets any time at all this tick.
+local function drainHigh(highDeadline)
+    while getTimestampMs() < highDeadline do
+        if not currentHighKey then
+            currentHighChunk, currentHighKey = popNextHigh()
+            if not currentHighKey then return false end
+            if DEBUG_MODE and WDecay_Debug and WDecay_Debug.chunksHigh then WDecay_Debug.chunksHigh = WDecay_Debug.chunksHigh + 1 end
+        end
+        if runOneChunk(currentHighKey, currentHighChunk, highDeadline) == "pending" then return true end
+        currentHighKey, currentHighChunk = nil, nil
+    end
+    return currentHighKey ~= nil or chunkQueueHeadHigh <= chunkQueueTailHigh
+end
+
+-- Retain low work until it leaves normal scan coverage.
+local function lowStalenessSqDistThreshold()
+    return SCAN_RADIUS * SCAN_RADIUS * 64
+end
+
+-- Same staleness-discard shape as popNextHigh, just with the wider bound
+-- above instead of the priority radius.
+local function popNextLow()
+    while chunkQueueHeadLow <= chunkQueueTailLow do
+        local i = chunkQueueHeadLow
+        local chunk, key = chunkQueueLowChunks[i], chunkQueueLowKeys[i]
+        chunkQueueLowChunks[i] = nil
+        chunkQueueLowKeys[i] = nil
+        chunkQueueHeadLow = chunkQueueHeadLow + 1
+
+        local wx, wy = chunkWorldCoords(chunk)
+        local dist = wx and nearestPlayerSqDistToChunk(wx, wy)
+        if dist and dist > lowStalenessSqDistThreshold() then
+            pendingChunks[key] = nil
+        else
+            return chunk, key
+        end
+    end
+    return nil, nil
+end
+
+-- Same shape as drainHigh, for the low queue -- only ever called once high
+-- has nothing outstanding this tick (see runDispatchLoop). A low chunk
+-- paused here to let high through earlier just resumes where it left off;
+-- chunkWork[key] preserved its cursor.
+local function drainLow(lowDeadline)
+    while getTimestampMs() < lowDeadline do
+        if not currentLowKey then
+            currentLowChunk, currentLowKey = popNextLow()
+            if not currentLowKey then return end
+            if DEBUG_MODE and WDecay_Debug and WDecay_Debug.chunksLow then WDecay_Debug.chunksLow = WDecay_Debug.chunksLow + 1 end
+        end
+        if runOneChunk(currentLowKey, currentLowChunk, lowDeadline) == "pending" then return end
+        currentLowKey, currentLowChunk = nil, nil
     end
 end
 
-local function processNextQueuedChunk(highPriority, deadline)
-    local chunk = nil
-    local key = nil
-    local wx = nil
-    local wy = nil
-    if highPriority then
-        if chunkQueueHeadHigh > chunkQueueTailHigh then return false end
-        chunk = chunkQueueHighChunks[chunkQueueHeadHigh]
-        key = chunkQueueHighKeys[chunkQueueHeadHigh]
-        wx = chunkQueueHighWx[chunkQueueHeadHigh]
-        wy = chunkQueueHighWy[chunkQueueHeadHigh]
-        chunkQueueHighChunks[chunkQueueHeadHigh] = nil
-        chunkQueueHighKeys[chunkQueueHeadHigh] = nil
-        chunkQueueHighWx[chunkQueueHeadHigh] = nil
-        chunkQueueHighWy[chunkQueueHeadHigh] = nil
-        chunkQueueHeadHigh = chunkQueueHeadHigh + 1
-        if DEBUG_MODE and WDecay_Debug and WDecay_Debug.chunksHigh then WDecay_Debug.chunksHigh = WDecay_Debug.chunksHigh + 1 end
-    else
-        if chunkQueueHeadLow > chunkQueueTailLow then return false end
-        chunk = chunkQueueLowChunks[chunkQueueHeadLow]
-        key = chunkQueueLowKeys[chunkQueueHeadLow]
-        wx = chunkQueueLowWx[chunkQueueHeadLow]
-        wy = chunkQueueLowWy[chunkQueueHeadLow]
-        chunkQueueLowChunks[chunkQueueHeadLow] = nil
-        chunkQueueLowKeys[chunkQueueHeadLow] = nil
-        chunkQueueLowWx[chunkQueueHeadLow] = nil
-        chunkQueueLowWy[chunkQueueHeadLow] = nil
-        chunkQueueHeadLow = chunkQueueHeadLow + 1
-        if DEBUG_MODE and WDecay_Debug and WDecay_Debug.chunksLow then WDecay_Debug.chunksLow = WDecay_Debug.chunksLow + 1 end
+-- Every tick, high is always attended to first and completely -- a low
+-- chunk mid-scan from a previous tick never blocks newly-arrived
+-- near-player work, however long the low chunk takes to finish. Low only
+-- gets any time (up to its own, smaller lowDeadline) once high has nothing
+-- outstanding this tick: no queued high chunks and no in-progress one.
+local function runDispatchLoop(highDeadline, lowDeadline)
+    if drainHigh(highDeadline) then return end
+    drainLow(lowDeadline)
+end
+
+local function nothingActive()
+    return currentHighKey == nil and currentLowKey == nil
+end
+
+-- Compact empty FIFO storage after the active jobs and both queues drain.
+local function resetIdleQueues()
+    if not nothingActive() or chunkQueueHeadHigh <= chunkQueueTailHigh or chunkQueueHeadLow <= chunkQueueTailLow then
+        return false
     end
-    if chunk then runQueuedChunk(chunk, key, wx, wy, not highPriority, deadline) end
+    chunkQueueHeadHigh, chunkQueueTailHigh = 1, 0
+    chunkQueueHeadLow, chunkQueueTailLow = 1, 0
     return true
+end
+
+-- Real wall-clock time between successive OnTick calls -- the missing
+-- piece to turn "WDecay spends up to Xms/tick" into "WDecay costs Y% of a
+-- tick," which is what actually determines FPS impact. Xms means something
+-- very different at a game running 60 ticks/sec (16.7ms budget) vs. one
+-- struggling at 20 (50ms budget).
+local lastTickRealMs = nil
+
+-- Tracks each tracked player's world position at their *previous* scan, to
+-- detect a literal coverage gap: the periodic scan only sweeps
+-- effectiveScanRadius chunks around wherever the player currently is. If
+-- they moved farther than that between two scan cycles (extreme speed),
+-- there's a corridor of terrain neither scan touched.
+local lastScanOriginX = {}
+local lastScanOriginY = {}
+local lastRedecayCheckDay = {}
+
+local function isRedecayCheckDue(trackKey)
+    if not WDecay_Scaling.isRedecayEnabled() then return false end
+    local day = WDecay_Scaling.getWorldAgeDays()
+    if day == nil then return false end
+    local interval = math.max(1, WDecay_Scaling.getRedecayCheckIntervalDays() or 1)
+    return lastRedecayCheckDay[trackKey] == nil or day - lastRedecayCheckDay[trackKey] >= interval, day
+end
+
+-- Returns the distance (tiles) moved since this tracker's last scan, or nil
+-- on the first call. Callers use this both for gap detection (below) and to
+-- skip re-sweeping entirely when the player hasn't moved at all -- without
+-- that, a fully-generated area (everyone standing still, every chunk green)
+-- still pays a full sweep every effectiveScanInterval ticks forever, for
+-- zero benefit, since a repeat scan from the same spot finds exactly what
+-- the last one found.
+local function checkScanGap(trackKey, px, py, scanRadius)
+    local lastX, lastY = lastScanOriginX[trackKey], lastScanOriginY[trackKey]
+    lastScanOriginX[trackKey] = px
+    lastScanOriginY[trackKey] = py
+    if not lastX then return nil end
+    local dx, dy = px - lastX, py - lastY
+    local dist = math.sqrt(dx * dx + dy * dy)
+    local coverage = (scanRadius or SCAN_RADIUS) * 8
+    if DEBUG_MODE and dist > coverage then
+        print("[WDecay] Scan gap (" .. trackKey .. "): moved " .. math.floor(dist)
+            .. " tiles since last scan, but scan only covers " .. coverage
+            .. " tiles from wherever the player currently is -- up to ~"
+            .. math.floor(dist - coverage) .. " tiles of corridor behind them went unswept by either scan.")
+    end
+    return dist
+end
+
+local function recordTotalTickMs(startMs)
+    if not WDecay_Debug then return end
+    local totalMs = getTimestampMs() - startMs
+    WDecay_Debug.totalMsLast = totalMs
+    WDecay_Debug.totalMsMax = math.max(WDecay_Debug.totalMsMax or 0, totalMs)
+    local previousAverage = WDecay_Debug.totalMsAvg or totalMs
+    WDecay_Debug.totalMsAvg = previousAverage + (totalMs - previousAverage) * 0.1
 end
 
 function OnTick()
@@ -1221,6 +1484,54 @@ function OnTick()
 
     if not dispatcherConfigLoaded then
         loadDispatcherConfig()
+        if DEBUG_MODE then
+            print("[WDecay] Environment: isServer()=" .. tostring(isServer())
+                .. " isClient()=" .. tostring(isClient())
+                .. " isMultiplayer()=" .. tostring(isMultiplayer and isMultiplayer() or "n/a")
+                .. " isDedicated()=" .. tostring(isDedicated and isDedicated() or "n/a"))
+        end
+    end
+
+    local onTickStartMs = getTimestampMs()
+    local nowRealMs = onTickStartMs
+    if lastTickRealMs and WDecay_Debug then
+        local interval = nowRealMs - lastTickRealMs
+        WDecay_Debug.tickIntervalLast = interval
+        local prevAvg = WDecay_Debug.tickIntervalAvg or interval
+        WDecay_Debug.tickIntervalAvg = prevAvg + (interval - prevAvg) * 0.1
+    end
+    lastTickRealMs = nowRealMs
+
+    refreshTrackedPlayers()
+
+    -- Decide this before the scan. Previously wasDrivingFast was updated
+    -- after scanning, so even a correctly detected transition used one tick
+    -- of normal scan settings. More importantly, refreshTrackedPlayers has
+    -- now supplied offline SP's player-0 fallback to this check.
+    local effectiveBudgetMs = TIME_BUDGET_MS
+    if FAST_TRAVEL_SPEED_KMH > 0 and FAST_TRAVEL_BUDGET_MS < TIME_BUDGET_MS
+        and isAnyPlayerDrivingFast(FAST_TRAVEL_SPEED_KMH) then
+        effectiveBudgetMs = FAST_TRAVEL_BUDGET_MS
+    end
+    if (effectiveBudgetMs < TIME_BUDGET_MS) ~= wasDrivingFast then
+        wasDrivingFast = effectiveBudgetMs < TIME_BUDGET_MS
+        if DEBUG_MODE then
+            print("[WDecay] Fast travel budget " .. (wasDrivingFast and "engaged (" .. effectiveBudgetMs .. "ms)" or "released (" .. TIME_BUDGET_MS .. "ms)")
+                .. " source=" .. trackedPlayerSource .. " players=" .. trackedPlayerCount
+                .. " vehicles=" .. fastTravelVehicleCount .. " maxSpeed=" .. string.format("%.1f", fastTravelMaxSpeedKmh)
+                .. "km/h threshold=" .. FAST_TRAVEL_SPEED_KMH .. "km/h")
+        end
+    end
+    if WDecay_Debug then
+        WDecay_Debug.budgetMs = effectiveBudgetMs
+        WDecay_Debug.scanRadius = wasDrivingFast and FAST_TRAVEL_SCAN_RADIUS or SCAN_RADIUS
+        WDecay_Debug.fastTravelActive = wasDrivingFast
+        WDecay_Debug.fastTravelPlayerSource = trackedPlayerSource
+        WDecay_Debug.fastTravelPlayerCount = trackedPlayerCount
+        WDecay_Debug.fastTravelVehicleCount = fastTravelVehicleCount
+        WDecay_Debug.fastTravelMaxSpeedKmh = fastTravelMaxSpeedKmh
+        WDecay_Debug.fastTravelThresholdKmh = FAST_TRAVEL_SPEED_KMH
+        WDecay_Debug.effectiveScanInterval = wasDrivingFast and FAST_TRAVEL_SCAN_INTERVAL or scanInterval
     end
 
     if DEBUG_MODE then
@@ -1242,162 +1553,170 @@ function OnTick()
         if isMultiplayer() then
             scanInterval = SCAN_INTERVAL * 2
         end
-
         scanIntervalSet = true
     end
 
     scanTimer = scanTimer + 1
-    if scanTimer >= scanInterval * scanBackoffMultiplier then
+    local effectiveScanInterval = wasDrivingFast and FAST_TRAVEL_SCAN_INTERVAL or scanInterval
+    local effectiveScanRadius = wasDrivingFast and FAST_TRAVEL_SCAN_RADIUS or SCAN_RADIUS
+    if scanTimer >= effectiveScanInterval then
         scanTimer = 0
-        if modDataTable then
-            local totalQueued = 0
-            local movedToNewChunk = false
-            local scannedLocal = false
-            local numPlayers = 1
-            if getNumActivePlayers then
-                numPlayers = getNumActivePlayers()
-            end
-
-            for playerIndex = 0, numPlayers - 1 do
-                local player = getSpecificPlayer(playerIndex)
-                if player then
-                    scannedLocal = true
-                    local px = math.floor(player:getX())
-                    local py = math.floor(player:getY())
-                    if px ~= 0 or py ~= 0 then
-                        if not spawnX then
-                            spawnX = px
-                            spawnY = py
-                        end
-
-                        if scanTrackerMoved("local:" .. playerIndex, px, py) then movedToNewChunk = true end
-                        local ok, result = pcall(ScanChunksAroundPos, px, py, SCAN_RADIUS)
-                        if ok then
-                            totalQueued = totalQueued + (result or 0)
-                        else
-                            print("[WDecay] Scan error: " .. tostring(result):sub(1, 120))
-                        end
+        -- Single backpressure rule: don't look for more work if the queue
+        -- is already deep. See MAX_QUEUE_DEPTH_FOR_SCAN above.
+        local scanStartMs = getTimestampMs()
+        if modDataTable and queueDepth() >= MAX_QUEUE_DEPTH_FOR_SCAN then
+            scanThrottledCount = scanThrottledCount + 1
+        end
+        if modDataTable and queueDepth() < MAX_QUEUE_DEPTH_FOR_SCAN then
+            for playerIndex = 1, trackedPlayerCount do
+                local player = trackedPlayers[playerIndex]
+                local px = math.floor(player:getX())
+                local py = math.floor(player:getY())
+                if px ~= 0 or py ~= 0 then
+                    if not spawnX then
+                        spawnX = px
+                        spawnY = py
                     end
-                end
-            end
-
-            if not scannedLocal then
-                local onlinePlayers = getOnlinePlayers()
-                if onlinePlayers and onlinePlayers.size then
-                    local playerCount = onlinePlayers:size()
-                    if playerCount > 0 then
-                        for i = 0, playerCount - 1 do
-                            local p = onlinePlayers:get(i)
-                            if p then
-                                local px = math.floor(p:getX())
-                                local py = math.floor(p:getY())
-                                if px ~= 0 or py ~= 0 then
-                                    if not spawnX then
-                                        spawnX = px
-                                        spawnY = py
-                                    end
-
-                                    if scanTrackerMoved("online:" .. i, px, py) then movedToNewChunk = true end
-                                    local ok, result = pcall(ScanChunksAroundPos, px, py, SCAN_RADIUS)
-                                    if ok then
-                                        totalQueued = totalQueued + (result or 0)
-                                    else
-                                        print("[WDecay] Scan error: " .. tostring(result):sub(1, 120))
-                                    end
-                                end
-                            end
+                    local trackKey = trackedPlayerSource .. ":" .. playerIndex
+                    local checkRedecay, redecayDay = isRedecayCheckDue(trackKey)
+                    local movedTiles = checkScanGap(trackKey, px, py, effectiveScanRadius)
+                    if movedTiles == nil or movedTiles >= 1 or checkRedecay then
+                        scanRunCount = scanRunCount + 1
+                        local ok, queuedOrErr, complete = pcall(ScanChunksAroundPos, px, py, effectiveScanRadius, checkRedecay)
+                        if not ok then
+                            print("[WDecay] Scan error: " .. tostring(queuedOrErr):sub(1, 120))
+                        elseif checkRedecay and complete then
+                            lastRedecayCheckDay[trackKey] = redecayDay
                         end
+                    else
+                        scanMovementSkippedCount = scanMovementSkippedCount + 1
                     end
                 end
             end
 
             if spawnX and spawnX ~= 0 and spawnAttempts < MAX_SPAWN_ATTEMPTS then
-                local radius = SCAN_RADIUS
-                if spawnAttempts < 5 then
-                    radius = SCAN_RADIUS * 2
-                end
-
+                -- Bootstrap remains wide while walking to cover resident
+                -- save-load chunks, but must not override the player's
+                -- deliberately smaller fast-travel scan coverage.
+                local radius = wasDrivingFast and FAST_TRAVEL_SCAN_RADIUS or SCAN_RADIUS * 2
                 spawnAttempts = spawnAttempts + 1
-                local ok, result = pcall(ScanChunksAroundPos, spawnX, spawnY, radius)
-                if ok then
-                    totalQueued = totalQueued + (result or 0)
-                else
-                    print("[WDecay] Spawn scan error: " .. tostring(result):sub(1, 120))
+                local ok, err = pcall(ScanChunksAroundPos, spawnX, spawnY, radius, false)
+                if not ok then
+                    print("[WDecay] Spawn scan error: " .. tostring(err):sub(1, 120))
                 end
             end
-
-            if totalQueued > 0 or movedToNewChunk then
-                scanBackoffMultiplier = 1
-            else
-                scanBackoffMultiplier = math.min(scanBackoffMultiplier * 2, SCAN_BACKOFF_MAX_MULTIPLIER)
-            end
+        end
+        if WDecay_Debug then
+            local scanMs = getTimestampMs() - scanStartMs
+            WDecay_Debug.scanMsLast = scanMs
+            WDecay_Debug.scanMsMax = math.max(WDecay_Debug.scanMsMax or 0, scanMs)
+            local prevScanAvg = WDecay_Debug.scanMsAvg or scanMs
+            WDecay_Debug.scanMsAvg = prevScanAvg + (scanMs - prevScanAvg) * 0.1
         end
     end
 
-    if chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow then
-        chunkQueueHeadHigh = 1
-        chunkQueueTailHigh = 0
-        chunkQueueHeadLow = 1
-        chunkQueueTailLow = 0
+    if resetIdleQueues() then
+        recordTotalTickMs(onTickStartMs)
         return
     end
 
-    if DEBUG_MODE then
-        if WDecay_Debug then
-            WDecay_Debug.queueHigh = math.max(0, chunkQueueTailHigh - chunkQueueHeadHigh + 1)
-            WDecay_Debug.queueLow = math.max(0, chunkQueueTailLow - chunkQueueHeadLow + 1)
-        end
-        debugTickCounter = debugTickCounter + 1
-        if debugTickCounter >= 30 then
-            debugTickCounter = 0
-            local highCount = chunkQueueTailHigh - chunkQueueHeadHigh + 1
-            local lowCount = chunkQueueTailLow - chunkQueueHeadLow + 1
-            print("[WDecay] Queue: high=" .. highCount .. " low=" .. lowCount)
-            if failedCooldownCount > 0 then
-                print("[WDecay] Chunk failures (last 30 ticks): cooled-down=" .. failedCooldownCount)
-                failedCooldownCount = 0
-            end
-        end
-    end
-
-    local effectiveBudgetMs = TIME_BUDGET_MS
-    if FAST_TRAVEL_SPEED_KMH > 0 and FAST_TRAVEL_BUDGET_MS < TIME_BUDGET_MS
-        and isAnyPlayerDrivingFast(FAST_TRAVEL_SPEED_KMH) then
-        effectiveBudgetMs = FAST_TRAVEL_BUDGET_MS
-    end
-    if DEBUG_MODE and (effectiveBudgetMs < TIME_BUDGET_MS) ~= wasDrivingFast then
-        wasDrivingFast = effectiveBudgetMs < TIME_BUDGET_MS
-        print("[WDecay] Fast travel budget " .. (wasDrivingFast and "engaged" or "released"))
-    end
     if WDecay_Debug then
-        WDecay_Debug.budgetMs = effectiveBudgetMs
-        WDecay_Debug.scanRadius = SCAN_RADIUS
+        WDecay_Debug.queueHigh = math.max(0, chunkQueueTailHigh - chunkQueueHeadHigh + 1)
+        WDecay_Debug.queueLow = math.max(0, chunkQueueTailLow - chunkQueueHeadLow + 1)
+    end
+    if DEBUG_MODE then
+        debugTickCounter = debugTickCounter + 1
+    end
+    if DEBUG_MODE and debugTickCounter >= 30 then
+        debugTickCounter = 0
+        local avgChunkMs = 0
+        if WDecay_Debug and WDecay_Debug.totalTimedChunks and WDecay_Debug.totalTimedChunks > 0 then
+            avgChunkMs = WDecay_Debug.totalChunkTimeMs / WDecay_Debug.totalTimedChunks
+        end
+        print("[WDecay] Queue: high=" .. math.max(0, chunkQueueTailHigh - chunkQueueHeadHigh + 1)
+            .. " low=" .. math.max(0, chunkQueueTailLow - chunkQueueHeadLow + 1)
+            .. " currentHigh=" .. (currentHighKey and tostring(currentHighKey) or "none")
+            .. " currentLow=" .. (currentLowKey and tostring(currentLowKey) or "none")
+            .. " avgMs/chunk=" .. string.format("%.3f", avgChunkMs))
+        if WDecay_Debug then
+            print("[WDecay] Total ms last/avg/max=" .. string.format("%.1f/%.1f/%.1f",
+                WDecay_Debug.totalMsLast or 0, WDecay_Debug.totalMsAvg or 0, WDecay_Debug.totalMsMax or 0)
+                .. " Dispatch ms last/avg/max=" .. string.format("%.1f/%.1f/%.1f",
+                WDecay_Debug.tickMsLast or 0, WDecay_Debug.tickMsAvg or 0, WDecay_Debug.tickMsMax or 0)
+                .. " Scan ms last/avg/max=" .. string.format("%.1f/%.1f/%.1f",
+                WDecay_Debug.scanMsLast or 0, WDecay_Debug.scanMsAvg or 0, WDecay_Debug.scanMsMax or 0))
+            -- The actual FPS-relevant number: what fraction of a real game
+            -- tick WDecay is consuming, not just raw ms (10ms means very
+            -- different things at 60 ticks/sec vs. a struggling 20).
+            local tickInterval = WDecay_Debug.tickIntervalAvg or 0
+            local pctOfTick = tickInterval > 0 and ((WDecay_Debug.totalMsAvg or 0) / tickInterval * 100) or 0
+            local approxFps = tickInterval > 0 and (1000 / tickInterval) or 0
+            print("[WDecay] Real tick interval avg=" .. string.format("%.2f", tickInterval)
+                .. "ms (~" .. string.format("%.1f", approxFps) .. " FPS) -- WDecay uses ~"
+                .. string.format("%.1f", pctOfTick) .. "% of an average tick")
+            print("[WDecay] Fast travel: active=" .. tostring(wasDrivingFast)
+                .. " source=" .. trackedPlayerSource .. " players=" .. trackedPlayerCount
+                .. " vehicles=" .. fastTravelVehicleCount .. " maxSpeed=" .. string.format("%.1f", fastTravelMaxSpeedKmh)
+                .. "km/h threshold=" .. FAST_TRAVEL_SPEED_KMH .. "km/h budget=" .. effectiveBudgetMs
+                .. "ms scanRadius=" .. effectiveScanRadius .. " scanInterval=" .. effectiveScanInterval
+                .. " scan runs/skipped=" .. scanRunCount .. "/" .. scanMovementSkippedCount)
+        end
+        local avgSquareCheckMs = squareCheckCallCount > 0 and (squareCheckTimeMs / squareCheckCallCount) or 0
+        print("[WDecay] checkAll: avg=" .. string.format("%.4f", avgSquareCheckMs) .. "ms x " .. squareCheckCallCount
+            .. " calls (total=" .. string.format("%.1f", squareCheckTimeMs) .. "ms)")
+        if WDecay_Debug and WDecay_Debug.totalTimedChunks and WDecay_Debug.totalTimedChunks > 0 then
+            print("[WDecay] squares/chunk (checkAll calls / completed chunks) = "
+                .. string.format("%.1f", squareCheckCallCount / WDecay_Debug.totalTimedChunks))
+        end
+        if scanThrottledCount > 0 then
+            print("[WDecay] Discovery throttled by depth cap: scan=" .. scanThrottledCount)
+        end
+        print("[WDecay] Discovery source: scan=" .. scanQueuedCount)
+        if failedCooldownCount > 0 then
+            print("[WDecay] Chunk failures (last 30 ticks): cooled-down=" .. failedCooldownCount)
+            failedCooldownCount = 0
+        end
+        -- Console mirror of the Status tab's generator-cost breakdown, so
+        -- it's visible from a console dump alone.
+        local statNames, statCount = {}, 0
+        for name in pairs(generatorTimeMs) do
+            statCount = statCount + 1
+            statNames[statCount] = name
+        end
+        table.sort(statNames, function(a, b) return generatorTimeMs[a] > generatorTimeMs[b] end)
+        if statCount > 0 then
+            local parts = {}
+            for i = 1, statCount do
+                local name = statNames[i]
+                local calls = generatorCallCount[name] or 0
+                local avg = calls > 0 and (generatorTimeMs[name] / calls) or 0
+                parts[#parts + 1] = name .. "=" .. string.format("%.3f", avg) .. "ms(x" .. calls .. ")"
+            end
+            print("[WDecay] Generator cost (avg ms x calls, heaviest first): " .. table.concat(parts, " "))
+        end
     end
 
+    local hadWork = not nothingActive() or chunkQueueHeadHigh <= chunkQueueTailHigh or chunkQueueHeadLow <= chunkQueueTailLow
     local startMs = getTimestampMs()
-    local deadline = startMs + effectiveBudgetMs
-    local highDeadline = deadline
-    if chunkQueueHeadHigh <= chunkQueueTailHigh and chunkQueueHeadLow <= chunkQueueTailLow and effectiveBudgetMs > 1 then
-        highDeadline = startMs + math.max(1, math.floor(effectiveBudgetMs * 0.7))
+    local highDeadline = startMs + effectiveBudgetMs
+    -- Low work can use its normal share only after high is clear.
+    local lowDeadline = startMs + math.max(1, math.floor(effectiveBudgetMs * LOW_BUDGET_FRACTION))
+    runDispatchLoop(highDeadline, lowDeadline)
+
+    -- How much of this tick's budget actually got used -- only measured on
+    -- ticks where there was work to do, so idle ticks (the vast majority)
+    -- don't dilute the average toward zero and hide the real cost of busy ticks.
+    if hadWork and WDecay_Debug then
+        local tickMs = getTimestampMs() - startMs
+        WDecay_Debug.tickMsLast = tickMs
+        WDecay_Debug.tickMsMax = math.max(WDecay_Debug.tickMsMax or 0, tickMs)
+        local prevAvg = WDecay_Debug.tickMsAvg or tickMs
+        WDecay_Debug.tickMsAvg = prevAvg + (tickMs - prevAvg) * 0.1
     end
 
-    while chunkQueueHeadHigh <= chunkQueueTailHigh and getTimestampMs() < highDeadline do
-        processNextQueuedChunk(true, highDeadline)
-    end
-    while chunkQueueHeadLow <= chunkQueueTailLow and getTimestampMs() < deadline do
-        processNextQueuedChunk(false, deadline)
-    end
-    while chunkQueueHeadHigh <= chunkQueueTailHigh and getTimestampMs() < deadline do
-        processNextQueuedChunk(true, deadline)
-    end
+    recordTotalTickMs(onTickStartMs)
 
-    if chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow then
-        chunkQueueHeadHigh = 1
-        chunkQueueTailHigh = 0
-        chunkQueueHeadLow = 1
-        chunkQueueTailLow = 0
-    end
-
+    resetIdleQueues()
 end
 
 Events.OnTick.Add(OnTick)
@@ -1408,19 +1727,100 @@ Events.OnCreatePlayer.Add(function(playerIndex, player)
 end)
 
 Events.OnInitGlobalModData.Add(function(isNewGame)
-    if not isServer() then return end
+    if isClient() then return end
 
     initModDataCache()
 end)
 
-Events.LoadChunk.Add(function(chunk)
-    if not isServer() then return false end
+-- Per-generator-type cost, most expensive first -- lets the Status tab
+-- answer "which generator is actually doing the work" instead of just an
+-- aggregate ms/chunk number.
+local function buildGeneratorStats()
+    local list = {}
+    for name, totalMs in pairs(generatorTimeMs) do
+        local calls = generatorCallCount[name] or 0
+        list[#list + 1] = { name = name, totalMs = totalMs, calls = calls, avgMs = calls > 0 and (totalMs / calls) or 0 }
+    end
+    table.sort(list, function(a, b) return a.totalMs > b.totalMs end)
+    return list
+end
 
-    queueChunk(chunk)
-end)
+-- Read-only data for the debug monitor. It only reads the scheduler tables;
+-- opening the panel must never enqueue, scan, or process chunks.
+function WDecay_Dispatcher_GetMonitorData(player, radius)
+    if not player then return {} end
+    radius = math.max(3, math.min(12, math.floor(tonumber(radius) or 12)))
+    local cx, cy = math.floor(player:getX() / 8), math.floor(player:getY() / 8)
+    local queued = {}
+    for i = chunkQueueHeadHigh, chunkQueueTailHigh do queued[chunkQueueHighKeys[i]] = "high" end
+    for i = chunkQueueHeadLow, chunkQueueTailLow do queued[chunkQueueLowKeys[i]] = "low" end
+
+    local cells = {}
+    local nowMs = getTimestampMs()
+    for x = cx - radius, cx + radius do
+        for y = cy - radius, cy + radius do
+            local key, state = GenerateKey(x, y), "unloaded"
+            local remainingMs = nil
+            if isSafehouseChunk(x, y) then state = "safehouse"
+            elseif chunkWork[key] then state = "pending"
+            elseif queued[key] then state = queued[key]
+            elseif isChunkInFailCooldown(key) then
+                state = "cooldown"
+                remainingMs = math.max(0, (chunkFailCooldownUntilMs[key] or nowMs) - nowMs)
+            elseif seenChunks[key] then state = "done"
+            elseif getSquare(x * 8, y * 8, 0) then state = "loaded"
+            end
+            cells[#cells + 1] = { x = x, y = y, state = state, remainingMs = remainingMs }
+        end
+    end
+
+    return {
+        centerX = cx, centerY = cy, radius = radius, cells = cells,
+        queueHigh = math.max(0, chunkQueueTailHigh - chunkQueueHeadHigh + 1),
+        queueLow = math.max(0, chunkQueueTailLow - chunkQueueHeadLow + 1),
+        added = WDecay_Debug and WDecay_Debug.queueAdded or 0,
+        completed = WDecay_Debug and WDecay_Debug.queueCompleted or 0,
+        failed = WDecay_Debug and WDecay_Debug.queueFailed or 0,
+        budget = WDecay_Debug and WDecay_Debug.budgetMs or TIME_BUDGET_MS,
+        processed = WDecay_Debug and WDecay_Debug.totalChunksProcessed or 0,
+        -- Total includes scan/discovery/dispatch; tickMs* remains the
+        -- dispatch-only component, so the two can be compared directly.
+        avgChunkMs = (WDecay_Debug and WDecay_Debug.totalTimedChunks and WDecay_Debug.totalTimedChunks > 0)
+            and (WDecay_Debug.totalChunkTimeMs / WDecay_Debug.totalTimedChunks) or 0,
+        totalMsLast = WDecay_Debug and WDecay_Debug.totalMsLast or 0,
+        totalMsAvg = WDecay_Debug and WDecay_Debug.totalMsAvg or 0,
+        totalMsMax = WDecay_Debug and WDecay_Debug.totalMsMax or 0,
+        tickMsLast = WDecay_Debug and WDecay_Debug.tickMsLast or 0,
+        tickMsAvg = WDecay_Debug and WDecay_Debug.tickMsAvg or 0,
+        tickMsMax = WDecay_Debug and WDecay_Debug.tickMsMax or 0,
+        scanMsLast = WDecay_Debug and WDecay_Debug.scanMsLast or 0,
+        scanMsAvg = WDecay_Debug and WDecay_Debug.scanMsAvg or 0,
+        scanMsMax = WDecay_Debug and WDecay_Debug.scanMsMax or 0,
+        generatorStats = buildGeneratorStats(),
+        scanQueued = scanQueuedCount,
+        currentHigh = currentHighKey,
+        currentLow = currentLowKey,
+        avgCheckAllMs = squareCheckCallCount > 0 and (squareCheckTimeMs / squareCheckCallCount) or 0,
+        checkAllCalls = squareCheckCallCount,
+        -- Real FPS-impact proxy (% of an actual tick WDecay consumes) and
+        -- how often discovery is actually being throttled by the depth cap.
+        tickIntervalAvg = WDecay_Debug and WDecay_Debug.tickIntervalAvg or 0,
+        scanThrottled = scanThrottledCount,
+        scanRuns = scanRunCount,
+        scanMovementSkipped = scanMovementSkippedCount,
+        fastTravelActive = wasDrivingFast,
+        fastTravelPlayerSource = trackedPlayerSource,
+        fastTravelPlayerCount = trackedPlayerCount,
+        fastTravelVehicleCount = fastTravelVehicleCount,
+        fastTravelMaxSpeedKmh = fastTravelMaxSpeedKmh,
+        fastTravelThresholdKmh = FAST_TRAVEL_SPEED_KMH,
+        effectiveScanInterval = wasDrivingFast and FAST_TRAVEL_SCAN_INTERVAL or scanInterval,
+        effectiveScanRadius = wasDrivingFast and FAST_TRAVEL_SCAN_RADIUS or SCAN_RADIUS,
+    }
+end
 
 function WDecay_Dispatcher_IsQueueIdle()
-    return chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow
+    return nothingActive() and chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow
 end
 
 local function forEachChunkAround(radius, fn, player)
@@ -1444,7 +1844,12 @@ local function forEachChunkAround(radius, fn, player)
     end
 end
 
-local function prioritizeQueuedArea(radius, player)
+-- Debug-command-only now: moves matching low-queue entries into the high
+-- queue on demand (used by WDecay_Dispatcher_QueueArea below). No longer
+-- run automatically every scan cycle -- with only one chunk ever active,
+-- a stale low-queue entry isn't stealing budget from anything, so there's
+-- nothing worth continuously re-sorting for.
+prioritizeQueuedArea = function(radius, player)
     local wanted = {}
     forEachChunkAround(radius, function(chunk, wx, wy)
         wanted[GenerateKey(wx, wy)] = true
@@ -1457,21 +1862,15 @@ local function prioritizeQueuedArea(radius, player)
             chunkQueueTailHigh = chunkQueueTailHigh + 1
             chunkQueueHighChunks[chunkQueueTailHigh] = chunkQueueLowChunks[i]
             chunkQueueHighKeys[chunkQueueTailHigh] = key
-            chunkQueueHighWx[chunkQueueTailHigh] = chunkQueueLowWx[i]
-            chunkQueueHighWy[chunkQueueTailHigh] = chunkQueueLowWy[i]
         else
             kept = kept + 1
             chunkQueueLowChunks[chunkQueueHeadLow + kept - 1] = chunkQueueLowChunks[i]
             chunkQueueLowKeys[chunkQueueHeadLow + kept - 1] = key
-            chunkQueueLowWx[chunkQueueHeadLow + kept - 1] = chunkQueueLowWx[i]
-            chunkQueueLowWy[chunkQueueHeadLow + kept - 1] = chunkQueueLowWy[i]
         end
     end
     for i = chunkQueueHeadLow + kept, chunkQueueTailLow do
         chunkQueueLowChunks[i] = nil
         chunkQueueLowKeys[i] = nil
-        chunkQueueLowWx[i] = nil
-        chunkQueueLowWy[i] = nil
     end
     chunkQueueTailLow = chunkQueueHeadLow + kept - 1
 end
@@ -1483,12 +1882,7 @@ function WDecay_Dispatcher_QueueArea(radius, wipeMarkers, player, highPriority)
 
     if highPriority then prioritizeQueuedArea(radius, player) end
 
-    if chunkQueueHeadHigh > chunkQueueTailHigh and chunkQueueHeadLow > chunkQueueTailLow then
-        chunkQueueHeadHigh = 1
-        chunkQueueTailHigh = 0
-        chunkQueueHeadLow = 1
-        chunkQueueTailLow = 0
-    end
+    resetIdleQueues()
 
     forEachChunkAround(radius, function(chunk, wx, wy)
         if isSafehouseChunk(wx, wy) then return end
@@ -1547,20 +1941,73 @@ function WDecay_Dispatcher_QueueArea(radius, wipeMarkers, player, highPriority)
                 chunkQueueTailHigh = chunkQueueTailHigh + 1
                 chunkQueueHighChunks[chunkQueueTailHigh] = chunk
                 chunkQueueHighKeys[chunkQueueTailHigh] = key
-                chunkQueueHighWx[chunkQueueTailHigh] = wx
-                chunkQueueHighWy[chunkQueueTailHigh] = wy
             else
                 chunkQueueTailLow = chunkQueueTailLow + 1
                 chunkQueueLowChunks[chunkQueueTailLow] = chunk
                 chunkQueueLowKeys[chunkQueueTailLow] = key
-                chunkQueueLowWx[chunkQueueTailLow] = wx
-                chunkQueueLowWy[chunkQueueTailLow] = wy
             end
         end
 
         queued = queued + 1
     end, player)
     print("[WDecay] Debug: queued " .. queued .. " chunks (radius=" .. radius .. ", wipeMarkers=" .. tostring(wipeMarkers == true) .. ")")
+    return queued
+end
+
+-- Debug overwrite actions use this to explicitly opt an area back into
+-- generation. Normal player cleaning leaves the marker in place, including
+-- during re-decay passes.
+function WDecay_Dispatcher_ClearCleanedArea(radius, player)
+    radius = radius or 3
+    local cleared = 0
+    forEachChunkAround(radius, function(chunk)
+        for z = chunk:getMinLevel(), chunk:getMaxLevel() do
+            for y = 0, 7 do
+                for x = 0, 7 do
+                    local square = chunk:getGridSquare(x, y, z)
+                    local data = square and square:getModData()
+                    if data and data["WDecay_cleaned"] ~= nil then
+                        data["WDecay_cleaned"] = nil
+                        square:transmitModdata()
+                        square:flagForHotSave()
+                        cleared = cleared + 1
+                    end
+                end
+            end
+        end
+    end, player)
+    return cleared
+end
+
+-- Mirrors the ordinary re-decay scan's eligibility decision, but lets the
+-- debug panel ask for that decision immediately instead of waiting for its
+-- next periodic scan. It never overwrites cleaned squares or bypasses age.
+function WDecay_Dispatcher_QueueDueRedecayArea(radius, player)
+    ensureOnTickRegistered()
+    radius = radius or 3
+    local queued = 0
+    local days = WDecay_Scaling.getWorldAgeDays()
+
+    forEachChunkAround(radius, function(chunk, wx, wy)
+        if isSafehouseChunk(wx, wy) then return end
+        local markerSquare = getMarkerSquare(chunk)
+        if not isChunkMarkedDone(markerSquare) or not needsRedecay(markerSquare, days) then return end
+
+        local key = GenerateKey(wx, wy)
+        if seenChunks[key] then
+            seenChunks[key] = nil
+            seenChunksCount = seenChunksCount - 1
+        end
+        if not pendingChunks[key] then
+            pendingChunks[key] = true
+            chunkQueueTailHigh = chunkQueueTailHigh + 1
+            chunkQueueHighChunks[chunkQueueTailHigh] = chunk
+            chunkQueueHighKeys[chunkQueueTailHigh] = key
+            queued = queued + 1
+        end
+    end, player)
+
+    print("[WDecay] Debug: queued " .. queued .. " due re-decay chunks (radius=" .. radius .. ")")
     return queued
 end
 

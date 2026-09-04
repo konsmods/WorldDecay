@@ -1,36 +1,7 @@
 local WDecay_Placement = {}
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 
-local clusterOptions = {
-    tree = 'WDecay.treeClusteringEnabled',
-    bush = 'WDecay.bushClusteringEnabled',
-    grass = 'WDecay.grassClusteringEnabled',
-}
-local clusterBoostOptions = {
-    tree = 'WDecay.treeClusteringBoost',
-    bush = 'WDecay.bushClusteringBoost',
-    grass = 'WDecay.grassClusteringBoost',
-}
-local clusterEnabled = {}
-local clusterBoosts = {}
 local DENSITY_CURVE = 1.5
-
-local function isClusterEnabled(cleanableType)
-    if clusterEnabled[cleanableType] ~= nil then return clusterEnabled[cleanableType] end
-    local sandbox = getSandboxOptions and getSandboxOptions()
-    local option = sandbox and sandbox:getOptionByName(clusterOptions[cleanableType])
-    clusterEnabled[cleanableType] = not option or option:getValue() ~= false
-    return clusterEnabled[cleanableType]
-end
-
-local function getClusterBoost(cleanableType)
-    if clusterBoosts[cleanableType] ~= nil then return clusterBoosts[cleanableType] end
-    local sandbox = getSandboxOptions and getSandboxOptions()
-    local option = sandbox and sandbox:getOptionByName(clusterBoostOptions[cleanableType])
-    local boost = option and option:getValue() or 1.0
-    clusterBoosts[cleanableType] = math.min(3.0, math.max(1.0, tonumber(boost) or 1.0))
-    return clusterBoosts[cleanableType]
-end
 
 local function hasContainer(object)
     local container = nil
@@ -71,34 +42,13 @@ function WDecay_Placement.isSafe(square)
     return safe
 end
 
+-- Clustering was removed because its neighbor scans dominated placement cost.
+-- The density curve remains as inexpensive chance shaping.
 function WDecay_Placement.clusterChance(square, cleanableType, chance, radius)
     if not chance then return chance end
     if chance > 0 and chance < 100 then
         chance = 100 * (chance / 100) ^ DENSITY_CURVE
     end
-    if not square or chance <= 0 or chance >= 100 or not isClusterEnabled(cleanableType) then
-        return chance
-    end
-
-    local cell = getCell and getCell()
-    if not cell then return chance end
-
-    local x, y, z = square:getX(), square:getY(), square:getZ()
-    radius = math.max(1, math.floor(tonumber(radius) or 1))
-    for ox = -radius, radius do
-            for oy = -radius, radius do
-                if ox ~= 0 or oy ~= 0 then
-                    local target = cell:getGridSquare(x + ox, y + oy, z)
-                    local found = false
-                    WDecay_Placement.forEachObject(target, function(object)
-                        local modData = object:hasModData() and object:getModData()
-                        if modData and modData["WDecay_Cleanable"] == cleanableType then found = true end
-                    end)
-                    if found then return math.min(100, chance * getClusterBoost(cleanableType)) end
-                end
-            end
-        end
-
     return chance
 end
 

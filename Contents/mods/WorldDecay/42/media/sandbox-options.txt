@@ -172,6 +172,16 @@ option WDecay.redecayThresholdDays
 	translation = WDecay_redecayThresholdDays,
 }
 
+option WDecay.redecayCheckIntervalDays
+{
+	type = integer,
+	min = 1,
+	max = 1000,
+	default = 1,
+	page = WDecay_TimeScaling,
+	translation = WDecay_redecayCheckIntervalDays,
+}
+
 option WDecay.dividerTSSeverity
 {
 	type = boolean,
@@ -224,14 +234,14 @@ option WDecay.scanRadius
 	translation = WDecay_scanRadius,
 }
 
-option WDecay.priorityRadius
+option WDecay.scanPriorityRadius
 {
 	type = integer,
-	min = 2,
-	max = 15,
+	min = 1,
+	max = 40,
 	default = 5,
 	page = WDecay,
-	translation = WDecay_priorityRadius,
+	translation = WDecay_scanPriorityRadius,
 }
 
 option WDecay.fastTravelSpeedKmh
@@ -249,9 +259,39 @@ option WDecay.fastTravelBudgetMs
 	type = integer,
 	min = 1,
 	max = 500,
-	default = 3,
+	default = 8,
 	page = WDecay,
 	translation = WDecay_fastTravelBudgetMs,
+}
+
+option WDecay.fastTravelScanInterval
+{
+	type = integer,
+	min = 1,
+	max = 500,
+	default = 25,
+	page = WDecay,
+	translation = WDecay_fastTravelScanInterval,
+}
+
+option WDecay.fastTravelScanRadius
+{
+	type = integer,
+	min = 1,
+	max = 40,
+	default = 4,
+	page = WDecay,
+	translation = WDecay_fastTravelScanRadius,
+}
+
+option WDecay.fastTravelPriorityRadius
+{
+	type = integer,
+	min = 1,
+	max = 40,
+	default = 2,
+	page = WDecay,
+	translation = WDecay_fastTravelPriorityRadius,
 }
 
 option WDecay.dividerFeatureToggles
@@ -348,24 +388,6 @@ option WDecay.dividerNatureTrees
 	default = true,
 	page = WDecay_Nature,
 	translation = WDecay_Divider_Nature_Trees,
-}
-
-option WDecay.treeClusteringEnabled
-{
-	type = boolean,
-	default = true,
-	page = WDecay_Nature,
-	translation = WDecay_treeClusteringEnabled,
-}
-
-option WDecay.treeClusteringBoost
-{
-	type = double,
-	min = 1.0,
-	max = 3.0,
-	default = 1.5,
-	page = WDecay_Nature,
-	translation = WDecay_treeClusteringBoost,
 }
 
 option WDecay.treePercentage
@@ -474,24 +496,6 @@ option WDecay.dividerNatureBushes
 	default = true,
 	page = WDecay_Nature,
 	translation = WDecay_Divider_Nature_Bushes,
-}
-
-option WDecay.bushClusteringEnabled
-{
-	type = boolean,
-	default = true,
-	page = WDecay_Nature,
-	translation = WDecay_bushClusteringEnabled,
-}
-
-option WDecay.bushClusteringBoost
-{
-	type = double,
-	min = 1.0,
-	max = 3.0,
-	default = 1.5,
-	page = WDecay_Nature,
-	translation = WDecay_bushClusteringBoost,
 }
 
 option WDecay.bushesPercentage
@@ -830,24 +834,6 @@ option WDecay.dividerNatureObjects
 	default = true,
 	page = WDecay_Nature,
 	translation = WDecay_Divider_Nature_Objects,
-}
-
-option WDecay.grassClusteringEnabled
-{
-	type = boolean,
-	default = true,
-	page = WDecay_Nature,
-	translation = WDecay_grassClusteringEnabled,
-}
-
-option WDecay.grassClusteringBoost
-{
-	type = double,
-	min = 1.0,
-	max = 3.0,
-	default = 1.5,
-	page = WDecay_Nature,
-	translation = WDecay_grassClusteringBoost,
 }
 
 option WDecay.outdoorGrassPercentage
