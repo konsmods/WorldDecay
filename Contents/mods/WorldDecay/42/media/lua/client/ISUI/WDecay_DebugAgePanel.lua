@@ -489,12 +489,16 @@ end
 
 local function runDebugAction(action, args)
     local player = getSpecificPlayer and getSpecificPlayer(0)
-    if sendClientCommand and player then
+    -- sendClientCommand also exists in single-player, but routing through it
+    -- makes the local player look like a non-admin MP client to the server
+    -- command guard. SP debug actions remain local developer tools.
+    if isClient and isClient() and sendClientCommand and player then
         args = args or {}
         args.action = action
         sendClientCommand(player, "WDecayDebug", "Run", args)
         return
     end
+    args = args or {}
     if action == "setDays" and WDecay_SetDays then WDecay_SetDays(args.days)
     elseif action == "clearDays" and WDecay_ClearDays then WDecay_ClearDays()
     elseif action == "addDays" and WDecay_AddDays then WDecay_AddDays(args.days)
@@ -504,10 +508,42 @@ local function runDebugAction(action, args)
     elseif action == "clean" and WDecay_CleanArea then WDecay_CleanArea(args.radius)
     elseif action == "overlays" and WDecay_ReapplyOverlays then WDecay_ReapplyOverlays(args.radius)
     elseif action == "timelapse" and WDecay_TimelapseToggle then WDecay_TimelapseToggle(args.step, args.ticks, args.target, args.radius)
-    elseif action == "season" and WDecay_SeasonalDebug then WDecay_SeasonalDebug(args.season)
-    elseif action == "advanceMonth" and WDecay_SeasonalAdvanceMonth then WDecay_SeasonalAdvanceMonth()
-    elseif action == "climate" and WDecay_SeasonalClimateInfo then WDecay_SeasonalClimateInfo()
-    elseif action == "reseason" and WDecay_SeasonalReseason then WDecay_SeasonalReseason(args.kind)
+    elseif action == "status" then
+        if WDecay_Status then WDecay_Status() end
+        if WDecay_DebugPrintStatus then WDecay_DebugPrintStatus() end
+    elseif action == "season" then
+        local months = { spring = 2, summer = 5, autumn = 8, winter = 11 }
+        local month = months[args.season]
+        local gameTime = getGameTime()
+        if month ~= nil and gameTime then
+            gameTime:setMonth(month)
+            WDecay_Season.invalidateCache()
+            print("[WorldDecay Debug] Set season to " .. args.season)
+        end
+    elseif action == "advanceMonth" then
+        local gameTime = getGameTime()
+        if gameTime then
+            gameTime:setMonth(gameTime:getMonth() + 1)
+            if gameTime:getMonth() >= 12 then
+                gameTime:setMonth(0)
+                gameTime:setYear(gameTime:getYear() + 1)
+            end
+            WDecay_Season.invalidateCache()
+            print("[WorldDecay Debug] Advanced to month " .. (gameTime:getMonth() + 1) .. "/" .. gameTime:getYear())
+        end
+    elseif action == "climate" then
+        local climate = getClimateManager()
+        if climate then
+            print("[WorldDecay Debug] Season=" .. tostring(climate:getSeasonName())
+                .. " SnowStrength=" .. tostring(climate:getSnowStrength()))
+        end
+    elseif action == "reseason" then
+        local functions = {
+            trees = "reseasonNearbyTrees", bushes = "reseasonNearbyBushes",
+            grass = "reseasonNearbyGrass", vines = "reseasonNearbyVines",
+        }
+        local fn = functions[args.kind] and WD_DebugTools and WD_DebugTools[functions[args.kind]]
+        if fn then fn() end
     end
 end
 

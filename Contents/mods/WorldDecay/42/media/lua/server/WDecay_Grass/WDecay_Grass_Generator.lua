@@ -2,6 +2,7 @@ local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 local WDecay_Placement = require('wdecay_placement/wdecay_placement')
+local WDecay_VegetationPattern = require('wdecay_vegetation_pattern/wdecay_vegetation_pattern')
 
 local randomizer = WDecay_Random.get()
 
@@ -34,7 +35,8 @@ local function LoadGridsquare(square, checkResult, level)
 
     if percentage <= 0 then return end
 
-    local chance = WDecay_Placement.shapeDensityChance(WDecay_Scaling.scaleFor('nature', percentage))
+    local scaled = WDecay_Scaling.scaleFor('nature', percentage)
+    local chance = WDecay_VegetationPattern.adjustPercentage(square, WDecay_Placement.shapeDensityChance(scaled), checkResult)
     if chance >= randomizer:random(1, 100) then
         if not WDecay_Placement.isSafe(square) then return false end
         return WDecay_Grass.spawnGrass(square) ~= nil

@@ -382,6 +382,24 @@ option WDecay.debugMode
 	translation = WDecay_debugMode,
 }
 
+option WDecay.vegetationPatternScale
+{
+	type = enum,
+	numValues = 5,
+	default = 4,
+	page = WDecay_Nature,
+	translation = WDecay_vegetationPatternScale,
+}
+
+option WDecay.vegetationPatternDistribution
+{
+	type = enum,
+	numValues = 3,
+	default = 3,
+	page = WDecay_Nature,
+	translation = WDecay_vegetationPatternDistribution,
+}
+
 option WDecay.dividerNatureTrees
 {
 	type = boolean,
@@ -864,6 +882,14 @@ option WDecay.roadGrassNaturalRange
 	default = 2,
 	page = WDecay_Nature,
 	translation = WDecay_roadGrassNaturalRange,
+}
+
+option WDecay.roadGrassVoronoiSpread
+{
+	type = boolean,
+	default = false,
+	page = WDecay_Nature,
+	translation = WDecay_roadGrassVoronoiSpread,
 }
 
 option WDecay.indoorGrassPercentage

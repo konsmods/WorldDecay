@@ -61,6 +61,7 @@ function WDecay_Grass.spawnGrass(square, cleanableType)
 end
 
 local cachedBase = nil
+local cachedVoronoiRoadSpread = nil
 function WDecay_Grass.getBasePercentage()
     if cachedBase == nil then
         local opt = getSandboxOptions():getOptionByName('WDecay.outdoorGrassPercentage')
@@ -78,6 +79,14 @@ function WDecay_Grass.getBasePercentageOnRoad()
     end
 
     return cachedBaseRoad
+end
+
+function WDecay_Grass.isVoronoiRoadSpreadEnabled()
+    if cachedVoronoiRoadSpread == nil then
+        local opt = getSandboxOptions():getOptionByName('WDecay.roadGrassVoronoiSpread')
+        cachedVoronoiRoadSpread = opt and opt:getValue() == true or false
+    end
+    return cachedVoronoiRoadSpread
 end
 
 local cachedIndoorBase = nil
@@ -103,6 +112,7 @@ end
 function WDecay_Grass.resetCaches()
     cachedBase = nil
     cachedBaseRoad = nil
+    cachedVoronoiRoadSpread = nil
     cachedIndoorBase = nil
     cachedRoofBase = nil
 end

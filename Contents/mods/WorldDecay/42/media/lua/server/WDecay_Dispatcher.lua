@@ -2,6 +2,7 @@ require('luautils')
 
 local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WDecay_Random = require('wdecay_random/wdecay_random')
+local WDecay_VegetationPattern = require('wdecay_vegetation_pattern/wdecay_vegetation_pattern')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
 local WDecay_ServerSecurity = require('WDecay_ServerSecurity')
 local WDecay_Carry = require('wdecay_carry/wdecay_carry')
@@ -863,20 +864,33 @@ local function prepareRoadGrassPlan(state)
     if chance <= 0 then return end
 
     local candidates = {}
+    local useVoronoiRoadSpread = WDecay_Grass.isVoronoiRoadSpreadEnabled()
+        and WDecay_VegetationPattern.isEnabled()
     for i = 1, #roadGrass.roads do
         local candidate = roadGrass.roads[i]
-        if hasNaturalNeighbor(state, candidate.x, candidate.y) then
+        if useVoronoiRoadSpread or hasNaturalNeighbor(state, candidate.x, candidate.y) then
             candidates[#candidates + 1] = candidate
         end
     end
     local target = math.floor(#candidates * chance / 100 + 0.5)
     if target <= 0 then return end
 
-    WDecay_Random.reseedForChunk(state.wx, state.wy, 700001)
-    local rng = WDecay_Random.get()
-    for i = #candidates, 2, -1 do
-        local j = rng:random(1, i)
-        candidates[i], candidates[j] = candidates[j], candidates[i]
+    if WDecay_VegetationPattern.isEnabled() then
+        for i = 1, #candidates do
+            candidates[i].vegetationScore = WDecay_VegetationPattern.getPlacementScore(candidates[i].square, 700001)
+        end
+        table.sort(candidates, function(a, b)
+            local aScore, bScore = a.vegetationScore, b.vegetationScore
+            if aScore == bScore then return a.y == b.y and a.x < b.x or a.y < b.y end
+            return aScore > bScore
+        end)
+    else
+        WDecay_Random.reseedForChunk(state.wx, state.wy, 700001)
+        local rng = WDecay_Random.get()
+        for i = #candidates, 2, -1 do
+            local j = rng:random(1, i)
+            candidates[i], candidates[j] = candidates[j], candidates[i]
+        end
     end
 
     local used, center = {}, 1
@@ -986,6 +1000,7 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
             markerData = markerData,
             doneAtDays = doneAtDays,
             nowDays = nowDays,
+            useVegetationPattern = WDecay_VegetationPattern.isEnabled(),
             pending = pending,
             positionsByCat = positionsByCat,
             pendingCarry = pendingCarry,
@@ -1068,17 +1083,31 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
                 state.placeRemaining = toPlace
                 state.placeCount = #positions
                 state.placePlaced = state.markerData[cat.placedKey] or 0
+                if state.useVegetationPattern then
+                    state.placeScores = {}
+                    for i = 1, #positions do
+                        local square = positions[i]
+                        state.placeScores[square] = WDecay_VegetationPattern.getPlacementScore(square, state.doneAtDays + c * 100000)
+                    end
+                    table.sort(positions, function(a, b)
+                        local aScore, bScore = state.placeScores[a], state.placeScores[b]
+                        if aScore == bScore then return a:getY() == b:getY() and a:getX() < b:getX() or a:getY() < b:getY() end
+                        return aScore < bScore
+                    end)
+                end
             end
             while state.placeRemaining > 0 and state.placeCount > 0 do
                 if deadline and getTimestampMs() >= deadline then
                     WDecay_Scaling.clearRedecayContext()
                     return "pending"
                 end
-                WDecay_Random.reseedForChunk(state.wx, state.wy, state.doneAtDays + c * 100000 + state.placeRemaining)
-                local randomizer = WDecay_Random.get()
-                local pick = randomizer:random(1, state.placeCount)
-                local square = positions[pick]
-                positions[pick] = positions[state.placeCount]
+                local index = state.placeCount
+                if not state.useVegetationPattern then
+                    WDecay_Random.reseedForChunk(state.wx, state.wy, state.doneAtDays + c * 100000 + state.placeRemaining)
+                    index = WDecay_Random.get():random(1, state.placeCount)
+                end
+                local square = positions[index]
+                positions[index] = positions[state.placeCount]
                 positions[state.placeCount] = nil
                 state.placeCount = state.placeCount - 1
                 state.placeRemaining = state.placeRemaining - 1
@@ -1092,6 +1121,7 @@ local function processChunkCarry(chunk, key, markerSquare, markerData, doneAtDay
             state.placeRemaining = nil
             state.placeCount = nil
             state.placePlaced = nil
+            state.placeScores = nil
         end
         state.catIndex = state.catIndex + 1
     end

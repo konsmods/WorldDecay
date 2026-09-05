@@ -62,6 +62,9 @@ local function fastCheckPlacement(square, level)
     r.hasRoof = false
     r.objects = false
     r.cleaned = false
+    -- Per-dispatch cache used by trees, bushes, and grass. This result table
+    -- is deliberately reused, so reset it before checking every square.
+    r.WDecay_vegetationMultiplier = nil
 
     local sqModData = square:getModData()
     if sqModData and sqModData["WDecay_cleaned"] then
