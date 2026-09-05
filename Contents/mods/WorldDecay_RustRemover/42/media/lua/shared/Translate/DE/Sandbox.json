@@ -1,0 +1,15 @@
+{
+    "Sandbox_RustRemover": "Rostentferner",
+    "Sandbox_RustRemover_enabled": "Rostentfernung aktivieren",
+    "Sandbox_RustRemover_enabled_tooltip": "Erlaubt Spielern, sichtbaren Fahrzeugrost mit Rostentferner und Schleifpapier zu entfernen.",
+    "Sandbox_RustRemover_rustPercentPerPass": "Rostentfernung pro Durchgang (%%)",
+    "Sandbox_RustRemover_rustPercentPerPass_tooltip": "Anteil des sichtbaren Fahrzeugrosts pro Behandlung.",
+    "Sandbox_RustRemover_baseActionTime": "Grundzeit der Behandlung",
+    "Sandbox_RustRemover_baseActionTime_tooltip": "Dauer der Aktion bei Mechanikstufe 0.",
+    "Sandbox_RustRemover_bottleUsePercent": "Rostentferner pro Durchgang (%%)",
+    "Sandbox_RustRemover_bottleUsePercent_tooltip": "Anteil einer Flasche pro Behandlung.",
+    "Sandbox_RustRemover_sandpaperConditionLoss": "Schleifpapier-Verschleiß pro Durchgang (%%)",
+    "Sandbox_RustRemover_sandpaperConditionLoss_tooltip": "Zustandsverlust des Schleifpapiers pro Behandlung.",
+    "Sandbox_RustRemover_mechanicsTimeReduction": "Mechanik-Zeitreduktion pro Stufe (%%)",
+    "Sandbox_RustRemover_mechanicsTimeReduction_tooltip": "Zeitersparnis je Mechanikstufe; maximal 50%%."
+}

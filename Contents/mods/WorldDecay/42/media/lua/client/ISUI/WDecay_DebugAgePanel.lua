@@ -17,6 +17,21 @@ local PANEL_MIN_H = 360
 local MONITOR_INTERVAL_MS = 400
 local monitorLastRequest = 0
 
+local function isMultiplayerAdmin()
+    if not (isClient and isClient()) then return true end
+    local player = getSpecificPlayer and getSpecificPlayer(0)
+    if not player then return false end
+
+    local ok, allowed = pcall(function()
+        return player.isAccessLevel and player:isAccessLevel("admin")
+    end)
+    if ok and allowed then return true end
+
+    local level = nil
+    pcall(function() level = player:getAccessLevel() end)
+    return string.lower(tostring(level or "")) == "admin"
+end
+
 -- Shared order for the map legend and Status breakdown.
 local MONITOR_STATES = { "high", "low", "pending", "cooldown", "done", "safehouse", "loaded", "unloaded" }
 local MONITOR_STATE_LABELS = {
@@ -468,7 +483,7 @@ end
 function WDecay_DebugAgePanel:getRadius()
     local r = tonumber(self.radiusEntry:getText())
     if not r or r < 1 then r = 3 end
-    if r > 100 then r = 100 end
+    if r > 3 then r = 3 end
     return r
 end
 
@@ -580,6 +595,11 @@ function WDecay_DebugAgePanel:new(x, y, width, height)
 end
 
 function WDecay_Panel()
+    if not isMultiplayerAdmin() then
+        print("[WDecay] Debug panel requires admin access in multiplayer")
+        return
+    end
+
     if WDecay_DebugAgePanel.instance then
         WDecay_DebugAgePanel.instance:close()
         return

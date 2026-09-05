@@ -1,0 +1,7 @@
+name=World Decay - Rust Remover [B42]
+id=WorldDecay_RustRemover
+description=Restore the visual rust on parked vehicles with Rust Remover and Sandpaper. Fully configurable and multiplayer-safe.
+poster=Poster.png
+pzversion=42
+modversion=1.0.0
+versionMin=42.20.0

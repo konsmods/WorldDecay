@@ -1,0 +1,15 @@
+{
+    "Sandbox_RustRemover": "Средство от ржавчины",
+    "Sandbox_RustRemover_enabled": "Включить удаление ржавчины",
+    "Sandbox_RustRemover_enabled_tooltip": "Позволяет удалять видимую ржавчину транспорта средством от ржавчины и наждачной бумагой.",
+    "Sandbox_RustRemover_rustPercentPerPass": "Удаление ржавчины за проход (%%)",
+    "Sandbox_RustRemover_rustPercentPerPass_tooltip": "Доля видимой ржавчины, удаляемая за одну обработку.",
+    "Sandbox_RustRemover_baseActionTime": "Базовое время обработки",
+    "Sandbox_RustRemover_baseActionTime_tooltip": "Длительность действия при навыке механики 0.",
+    "Sandbox_RustRemover_bottleUsePercent": "Расход средства за проход (%%)",
+    "Sandbox_RustRemover_bottleUsePercent_tooltip": "Доля бутылки, расходуемая за одну обработку.",
+    "Sandbox_RustRemover_sandpaperConditionLoss": "Износ наждачной бумаги за проход (%%)",
+    "Sandbox_RustRemover_sandpaperConditionLoss_tooltip": "Потеря состояния наждачной бумаги за одну обработку.",
+    "Sandbox_RustRemover_mechanicsTimeReduction": "Сокращение времени за уровень механики (%%)",
+    "Sandbox_RustRemover_mechanicsTimeReduction_tooltip": "Сокращение времени за уровень механики; максимум 50%%."
+}

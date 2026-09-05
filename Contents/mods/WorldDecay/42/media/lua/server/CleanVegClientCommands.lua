@@ -2,8 +2,7 @@ require('luautils')
 local WDecay_CleanVegetation = require('wdecay_cleanvegetation/wdecay_cleanvegetation')
 local WDecay_Season = require('wdecay_season/wdecay_season')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
-
-local SEASONAL_DEBUG_MODULE = "WDecaySeasonalDebug"
+local Security = require('WDecay_ServerSecurity')
 
 local function markCleaned(square)
     square:getModData()["WDecay_cleaned"] = true
@@ -164,7 +163,8 @@ local function onCleanVegCommand(module, command, player, args)
 
     local square = getCell():getGridSquare(x, y, z)
 
-    if square and isReachable(player, square) then
+    if square and isReachable(player, square)
+        and Security.allowPlayerAction(player, "cleanVegetation", 1000) then
         WDecay_CleanSquare(square)
     end
 end
@@ -201,81 +201,64 @@ local function printSeasonalClimateInfo()
         .. " SnowStrength=" .. tostring(climate:getSnowStrength()))
 end
 
--- Seasonal debug actions originate in the client context menu, but the
--- vegetation objects are server-owned in both hosted SP and MP. Always route
--- these actions through OnClientCommand so a dedicated server does the actual
--- sweep and transmits the sprite/overlay changes to every client.
-local function onSeasonalDebugCommand(module, command, player, args)
-    if module ~= SEASONAL_DEBUG_MODULE or command ~= "Run" or type(args) ~= "table" then
-        return
-    end
-
-    local action = args.action
-    if action == "season" then
-        setSeasonalDebugSeason(args.season)
-        return
-    elseif action == "climate" then
-        printSeasonalClimateInfo()
-        return
-    elseif action == "reseason" then
-        local names = { trees = "reseasonNearbyTrees", bushes = "reseasonNearbyBushes", grass = "reseasonNearbyGrass", vines = "reseasonNearbyVines" }
-        local fn = names[args.kind] and WD_DebugTools and WD_DebugTools[names[args.kind]]
-        if fn then fn() end
-        return
-    end
-    if action == "advanceMonth" then
-        advanceSeasonalDebugMonth()
-        return
-    end
-
-    local debugFunctions = {
-        trees = "reseasonNearbyTrees",
-        bushes = "reseasonNearbyBushes",
-        grass = "reseasonNearbyGrass",
-        vines = "reseasonNearbyVines",
-    }
-    local functionName = debugFunctions[action]
-    local debugFunction = functionName and WD_DebugTools and WD_DebugTools[functionName]
-    if debugFunction then
-        debugFunction()
-    else
-        print("[WorldDecay Debug] Seasonal action unavailable on server: " .. tostring(action))
-    end
-end
-
+-- Every debug action is server-owned through this sole multiplayer route.
 local function onDebugCommand(module, command, player, args)
     if module ~= "WDecayDebug" or command ~= "Run" or type(args) ~= "table" then return end
+    if not Security.isAdmin(player) then
+        if Security.allowPlayerAction(player, "debugDenied", 5000) then
+            print("[WDecay] Denied debug command from non-admin player")
+        end
+        return
+    end
+
     local action = args.action
+    if type(action) ~= "string" then return end
+    local cooldown = action == "monitor" and 400 or 1000
+    if not Security.allowPlayerAction(player, "debug:" .. action, cooldown) then return end
+
+    local reseasonFunctions = {
+        trees = "reseasonNearbyTrees", bushes = "reseasonNearbyBushes",
+        grass = "reseasonNearbyGrass", vines = "reseasonNearbyVines",
+    }
+    local radius = Security.debugRadius(args.radius)
+
     if action == "season" then setSeasonalDebugSeason(args.season)
     elseif action == "advanceMonth" then advanceSeasonalDebugMonth()
     elseif action == "climate" then printSeasonalClimateInfo()
     elseif action == "reseason" then
-        local names = { trees = "reseasonNearbyTrees", bushes = "reseasonNearbyBushes", grass = "reseasonNearbyGrass", vines = "reseasonNearbyVines" }
-        local fn = names[args.kind] and WD_DebugTools and WD_DebugTools[names[args.kind]]
+        local fn = reseasonFunctions[args.kind] and WD_DebugTools and WD_DebugTools[reseasonFunctions[args.kind]]
         if fn then fn() end
     elseif action == "status" then
         if WDecay_Status then WDecay_Status() end
         if WDecay_DebugPrintStatus then WDecay_DebugPrintStatus() end
     elseif action == "monitor" and player and WDecay_Dispatcher_GetMonitorData then
-        sendServerCommand(player, "WDecayDebug", "Monitor", WDecay_Dispatcher_GetMonitorData(player, args.radius))
+        sendServerCommand(player, "WDecayDebug", "Monitor", WDecay_Dispatcher_GetMonitorData(player, radius))
     elseif action == "setDays" and WDecay_SetDays then
-        WDecay_SetDays(args.days)
+        local days = Security.clampInteger(args.days, 0, Security.MAX_DEBUG_AGE_DAYS, nil)
+        if not days then return end
+        WDecay_SetDays(days)
         sendServerCommand(player, "WDecayDebug", "Age", { hasOverride = true, days = WDecay_Scaling.getDebugAgeDays() })
     elseif action == "clearDays" and WDecay_ClearDays then
         WDecay_ClearDays()
         sendServerCommand(player, "WDecayDebug", "Age", { hasOverride = false })
     elseif action == "addDays" and WDecay_AddDays then
-        WDecay_AddDays(args.days)
+        local days = Security.clampInteger(args.days, 1, Security.MAX_DEBUG_AGE_DAYS, nil)
+        if not days then return end
+        WDecay_AddDays(days)
         sendServerCommand(player, "WDecayDebug", "Age", { hasOverride = true, days = WDecay_Scaling.getDebugAgeDays() })
-    elseif action == "regen" and WDecay_Regen then WDecay_Regen(args.radius, player)
-    elseif action == "redecay" and WDecay_Redecay then WDecay_Redecay(args.radius, player)
-    elseif action == "timerRedecay" and WDecay_TimerRedecay then WDecay_TimerRedecay(args.radius, player)
-    elseif action == "clean" and WDecay_CleanArea then WDecay_CleanArea(args.radius, player)
-    elseif action == "overlays" and WDecay_ReapplyOverlays then WDecay_ReapplyOverlays(args.radius, player)
-    elseif action == "timelapse" and WDecay_TimelapseToggle then WDecay_TimelapseToggle(args.step, args.ticks, args.target, args.radius, player)
+    elseif action == "regen" and WDecay_Regen then WDecay_Regen(radius, player)
+    elseif action == "redecay" and WDecay_Redecay then WDecay_Redecay(radius, player)
+    elseif action == "timerRedecay" and WDecay_TimerRedecay then WDecay_TimerRedecay(radius, player)
+    elseif action == "clean" and WDecay_CleanArea then WDecay_CleanArea(radius, player)
+    elseif action == "overlays" and WDecay_ReapplyOverlays then WDecay_ReapplyOverlays(radius, player)
+    elseif action == "timelapse" and WDecay_TimelapseToggle then
+        local step = Security.clampInteger(args.step, 1, Security.MAX_TIMELAPSE_STEP_DAYS, nil)
+        local ticks = Security.clampInteger(args.ticks, 1, Security.MAX_TIMELAPSE_TICKS, nil)
+        local target = Security.clampInteger(args.target, 1, Security.MAX_DEBUG_AGE_DAYS, nil)
+        if not step or not ticks or not target then return end
+        WDecay_TimelapseToggle(step, ticks, target, radius, player)
     end
 end
 
 Events.OnClientCommand.Add(onCleanVegCommand)
-Events.OnClientCommand.Add(onSeasonalDebugCommand)
 Events.OnClientCommand.Add(onDebugCommand)

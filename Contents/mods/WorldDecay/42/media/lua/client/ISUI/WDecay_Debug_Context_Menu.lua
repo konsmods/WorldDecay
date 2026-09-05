@@ -64,6 +64,11 @@ local DEBUG_SEASON_PREVIEWS = {
 local DEBUG_TREE_MODDATA_FLAG = "WDecay_DebugTree"
 
 local function isWDecayDebugEnabled()
+    -- These tile-edit tools are local debug utilities, not server-authoritative
+    -- multiplayer commands. Keep them out of MP until each action has a
+    -- validated server implementation.
+    if isClient and isClient() then return false end
+
     if isDebugEnabled and isDebugEnabled() then
         return true
     end

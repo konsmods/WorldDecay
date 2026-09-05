@@ -3,6 +3,7 @@ require('luautils')
 local WD_Debug_Metric = require("Debug/WD_Debug_Metric")
 local WDecay_Random = require('wdecay_random/wdecay_random')
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local WDecay_ServerSecurity = require('WDecay_ServerSecurity')
 local WDecay_Carry = require('wdecay_carry/wdecay_carry')
 local WDecay_Placement = require('wdecay_placement/wdecay_placement')
 local WDecay_Trees = require('WDecay_Trees/WDecay_Trees')
@@ -2089,7 +2090,7 @@ end
 
 function WDecay_Dispatcher_QueueArea(radius, wipeMarkers, player, highPriority)
     ensureOnTickRegistered()
-    radius = radius or 3
+    radius = WDecay_ServerSecurity.debugRadius(radius)
     local queued = 0
 
     if highPriority then prioritizeQueuedArea(radius, player) end
@@ -2170,7 +2171,7 @@ end
 -- generation. Normal player cleaning leaves the marker in place, including
 -- during re-decay passes.
 function WDecay_Dispatcher_ClearCleanedArea(radius, player)
-    radius = radius or 3
+    radius = WDecay_ServerSecurity.debugRadius(radius)
     local cleared = 0
     forEachChunkAround(radius, function(chunk)
         for z = chunk:getMinLevel(), chunk:getMaxLevel() do
@@ -2196,7 +2197,7 @@ end
 -- next periodic scan. It never overwrites cleaned squares or bypasses age.
 function WDecay_Dispatcher_QueueDueRedecayArea(radius, player)
     ensureOnTickRegistered()
-    radius = radius or 3
+    radius = WDecay_ServerSecurity.debugRadius(radius)
     local queued = 0
     local days = WDecay_Scaling.getWorldAgeDays()
 
@@ -2224,8 +2225,8 @@ function WDecay_Dispatcher_QueueDueRedecayArea(radius, player)
 end
 
 function WDecay_Dispatcher_StampDoneAt(radius, days, player)
-    radius = radius or 3
-    days = math.floor(tonumber(days) or 0)
+    radius = WDecay_ServerSecurity.debugRadius(radius)
+    days = WDecay_ServerSecurity.clampInteger(days, 0, WDecay_ServerSecurity.MAX_DEBUG_AGE_DAYS, 0)
     local stamped = 0
     forEachChunkAround(radius, function(chunk, wx, wy)
         local markerSquare = getMarkerSquare(chunk)

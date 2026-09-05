@@ -1,0 +1,15 @@
+{
+    "Sandbox_RustRemover": "Rust Remover",
+    "Sandbox_RustRemover_enabled": "Enable Rust Removal",
+    "Sandbox_RustRemover_enabled_tooltip": "Allow players to remove visual vehicle rust using Rust Remover and Sandpaper.",
+    "Sandbox_RustRemover_rustPercentPerPass": "Rust Removed per Pass (%%)",
+    "Sandbox_RustRemover_rustPercentPerPass_tooltip": "The percentage of a vehicle's visual rust removed by one completed treatment.",
+    "Sandbox_RustRemover_baseActionTime": "Base Treatment Time",
+    "Sandbox_RustRemover_baseActionTime_tooltip": "Timed-action duration at Mechanics level 0. The default 600 is a deliberately slow 10-minute treatment.",
+    "Sandbox_RustRemover_bottleUsePercent": "Rust Remover Used per Pass (%%)",
+    "Sandbox_RustRemover_bottleUsePercent_tooltip": "The percentage drained from a Rust Remover bottle for each treatment.",
+    "Sandbox_RustRemover_sandpaperConditionLoss": "Sandpaper Wear per Pass (%%)",
+    "Sandbox_RustRemover_sandpaperConditionLoss_tooltip": "The percentage of a Sandpaper sheet's maximum condition lost per treatment.",
+    "Sandbox_RustRemover_mechanicsTimeReduction": "Mechanics Time Reduction per Level (%%)",
+    "Sandbox_RustRemover_mechanicsTimeReduction_tooltip": "How much each Mechanics level shortens treatment time. Total reduction is capped at 50%%."
+}

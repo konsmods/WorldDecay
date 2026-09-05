@@ -1,3 +1,10 @@
+[h1]2.3.3[/h1]
+[list]
+[*]Hardened multiplayer debug commands: server-side access checks, strict action validation, cooldowns, and safe area limits now protect calendar, cleaning, regeneration, and re-decay tools.
+[*]Added WorldDecay_RustRemover, an optional multiplayer-safe submod for slowly restoring vehicle rust with rare Rust Remover and Sandpaper supplies. It temporarily uses vanilla item visuals.
+[*]Renamed the Manik's A Decade Later submod to WorldDecay_Maniks_a_decade_later.
+[/list]
+
 [h1]2.3.2[/h1]
 [list]
 [*]Added road-grass clustering near natural ground, including a configurable range that works across chunk borders, and raised the default road grass-object density to 40%%.

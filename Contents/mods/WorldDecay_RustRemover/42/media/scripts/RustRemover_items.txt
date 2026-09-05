@@ -1,0 +1,26 @@
+module RustRemover
+{
+    item RustRemover
+    {
+        DisplayCategory = Tool,
+        DisplayName = Rust Remover,
+        ItemType = base:drainable,
+        UseDelta = 0.25,
+        Weight = 0.8,
+        Icon = Bleach,
+        StaticModel = BleachBottle,
+        WorldStaticModel = BleachBottle,
+        UseWhileEquipped = false,
+    }
+
+    item Sandpaper
+    {
+        DisplayCategory = Tool,
+        DisplayName = Sandpaper,
+        ItemType = base:normal,
+        ConditionMax = 100,
+        Weight = 0.1,
+        Icon = SteelWool,
+        WorldStaticModel = SteelWool,
+    }
+}

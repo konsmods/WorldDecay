@@ -1,0 +1,15 @@
+{
+    "Sandbox_RustRemover": "Removedor de óxido",
+    "Sandbox_RustRemover_enabled": "Activar eliminación de óxido",
+    "Sandbox_RustRemover_enabled_tooltip": "Permite eliminar el óxido visual de vehículos con removedor y lija.",
+    "Sandbox_RustRemover_rustPercentPerPass": "Óxido eliminado por pasada (%%)",
+    "Sandbox_RustRemover_rustPercentPerPass_tooltip": "Porcentaje de óxido visual eliminado por tratamiento.",
+    "Sandbox_RustRemover_baseActionTime": "Tiempo base del tratamiento",
+    "Sandbox_RustRemover_baseActionTime_tooltip": "Duración de la acción con Mecánica nivel 0.",
+    "Sandbox_RustRemover_bottleUsePercent": "Removedor usado por pasada (%%)",
+    "Sandbox_RustRemover_bottleUsePercent_tooltip": "Porcentaje de una botella usado por tratamiento.",
+    "Sandbox_RustRemover_sandpaperConditionLoss": "Desgaste de lija por pasada (%%)",
+    "Sandbox_RustRemover_sandpaperConditionLoss_tooltip": "Pérdida de condición de la lija por tratamiento.",
+    "Sandbox_RustRemover_mechanicsTimeReduction": "Reducción de tiempo por Mecánica (%%)",
+    "Sandbox_RustRemover_mechanicsTimeReduction_tooltip": "Reducción por nivel de Mecánica; máximo 50%%."
+}

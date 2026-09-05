@@ -1,0 +1,59 @@
+VERSION = 1,
+
+option RustRemover.enabled
+{
+    type = boolean,
+    default = true,
+    page = RustRemover,
+    translation = RustRemover_enabled,
+}
+
+option RustRemover.rustPercentPerPass
+{
+    type = integer,
+    min = 1,
+    max = 25,
+    default = 5,
+    page = RustRemover,
+    translation = RustRemover_rustPercentPerPass,
+}
+
+option RustRemover.baseActionTime
+{
+    type = integer,
+    min = 60,
+    max = 3600,
+    default = 600,
+    page = RustRemover,
+    translation = RustRemover_baseActionTime,
+}
+
+option RustRemover.bottleUsePercent
+{
+    type = integer,
+    min = 1,
+    max = 100,
+    default = 25,
+    page = RustRemover,
+    translation = RustRemover_bottleUsePercent,
+}
+
+option RustRemover.sandpaperConditionLoss
+{
+    type = integer,
+    min = 1,
+    max = 100,
+    default = 25,
+    page = RustRemover,
+    translation = RustRemover_sandpaperConditionLoss,
+}
+
+option RustRemover.mechanicsTimeReduction
+{
+    type = integer,
+    min = 0,
+    max = 10,
+    default = 5,
+    page = RustRemover,
+    translation = RustRemover_mechanicsTimeReduction,
+}

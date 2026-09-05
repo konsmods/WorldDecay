@@ -1,6 +1,7 @@
 require('luautils')
 
 local WDecay_Scaling = require('wdecay_scaling/wdecay_scaling')
+local Security = require('WDecay_ServerSecurity')
 
 local function refreshOverlays()
     if WDecay_Overlays_Refresh then
@@ -31,12 +32,8 @@ function WDecay_ClearDays()
     WDecay_Scaling.printStatus()
 end
 
-local MAX_DEBUG_RADIUS = 100
-
 function WDecay_CleanArea(radius, player)
-    radius = tonumber(radius) or 3
-    if radius < 1 then radius = 1 end
-    if radius > MAX_DEBUG_RADIUS then radius = MAX_DEBUG_RADIUS end
+    radius = Security.debugRadius(radius)
     if not WDecay_CleanSquare then
         print("[WDecay] Debug: WDecay_CleanSquare not available")
         return
@@ -102,9 +99,7 @@ local function stripFloorOverlays(floor)
 end
 
 function WDecay_ReapplyOverlays(radius, player)
-    radius = tonumber(radius) or 3
-    if radius < 1 then radius = 1 end
-    if radius > MAX_DEBUG_RADIUS then radius = MAX_DEBUG_RADIUS end
+    radius = Security.debugRadius(radius)
 
     local overlays = getTileOverlays()
     if not overlays then return end
@@ -134,7 +129,7 @@ function WDecay_ReapplyOverlays(radius, player)
 end
 
 function WDecay_Regen(radius, player)
-    radius = tonumber(radius) or 3
+    radius = Security.debugRadius(radius)
     WDecay_CleanArea(radius, player)
     if WDecay_Dispatcher_ClearCleanedArea then
         WDecay_Dispatcher_ClearCleanedArea(radius, player)
@@ -147,7 +142,7 @@ function WDecay_Regen(radius, player)
 end
 
 function WDecay_Redecay(radius, player)
-    radius = tonumber(radius) or 3
+    radius = Security.debugRadius(radius)
     if WDecay_Dispatcher_ClearCleanedArea then
         WDecay_Dispatcher_ClearCleanedArea(radius, player)
     end
@@ -157,14 +152,14 @@ function WDecay_Redecay(radius, player)
 end
 
 function WDecay_TimerRedecay(radius, player)
-    radius = tonumber(radius) or 3
+    radius = Security.debugRadius(radius)
     if WDecay_Dispatcher_QueueDueRedecayArea then
         WDecay_Dispatcher_QueueDueRedecayArea(radius, player)
     end
 end
 
 function WDecay_RedecayFrom(radius, days, player)
-    radius = tonumber(radius) or 3
+    radius = Security.debugRadius(radius)
     if WDecay_Dispatcher_StampDoneAt then
         WDecay_Dispatcher_StampDoneAt(radius, days or 0, player)
     end
@@ -213,18 +208,10 @@ local function timelapseTick()
 end
 
 function WDecay_Timelapse(stepDays, intervalTicks, targetDays, radius, player)
-    stepDays = tonumber(stepDays) or 7
-    if stepDays < 1 then stepDays = 1 end
-
-    intervalTicks = tonumber(intervalTicks) or 30
-    if intervalTicks < 1 then intervalTicks = 1 end
-
-    targetDays = tonumber(targetDays)
-    if targetDays and targetDays <= 0 then targetDays = nil end
-
-    radius = tonumber(radius) or 5
-    if radius < 1 then radius = 1 end
-    if radius > MAX_DEBUG_RADIUS then radius = MAX_DEBUG_RADIUS end
+    stepDays = Security.clampInteger(stepDays, 1, Security.MAX_TIMELAPSE_STEP_DAYS, 7)
+    intervalTicks = Security.clampInteger(intervalTicks, 1, Security.MAX_TIMELAPSE_TICKS, 30)
+    targetDays = Security.clampInteger(targetDays, 1, Security.MAX_DEBUG_AGE_DAYS, nil)
+    radius = Security.debugRadius(radius)
 
     if timelapse then
         Events.OnTick.Remove(timelapseTick)

@@ -1,0 +1,15 @@
+{
+    "Sandbox_RustRemover": "Removedor de ferrugem",
+    "Sandbox_RustRemover_enabled": "Ativar remoção de ferrugem",
+    "Sandbox_RustRemover_enabled_tooltip": "Permite remover a ferrugem visual de veículos com removedor e lixa.",
+    "Sandbox_RustRemover_rustPercentPerPass": "Ferrugem removida por passagem (%%)",
+    "Sandbox_RustRemover_rustPercentPerPass_tooltip": "Percentual de ferrugem visual removido por tratamento.",
+    "Sandbox_RustRemover_baseActionTime": "Tempo base do tratamento",
+    "Sandbox_RustRemover_baseActionTime_tooltip": "Duração da ação com Mecânica nível 0.",
+    "Sandbox_RustRemover_bottleUsePercent": "Removedor usado por passagem (%%)",
+    "Sandbox_RustRemover_bottleUsePercent_tooltip": "Percentual de uma garrafa usado por tratamento.",
+    "Sandbox_RustRemover_sandpaperConditionLoss": "Desgaste da lixa por passagem (%%)",
+    "Sandbox_RustRemover_sandpaperConditionLoss_tooltip": "Perda de condição da lixa por tratamento.",
+    "Sandbox_RustRemover_mechanicsTimeReduction": "Redução por nível de Mecânica (%%)",
+    "Sandbox_RustRemover_mechanicsTimeReduction_tooltip": "Redução por nível de Mecânica; máximo 50%%."
+}
