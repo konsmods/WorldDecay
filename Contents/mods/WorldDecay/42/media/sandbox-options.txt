@@ -386,7 +386,7 @@ option WDecay.vegetationPatternScale
 {
 	type = enum,
 	numValues = 5,
-	default = 4,
+	default = 1,
 	page = WDecay_Nature,
 	translation = WDecay_vegetationPatternScale,
 }
@@ -395,7 +395,7 @@ option WDecay.vegetationPatternDistribution
 {
 	type = enum,
 	numValues = 3,
-	default = 3,
+	default = 1,
 	page = WDecay_Nature,
 	translation = WDecay_vegetationPatternDistribution,
 }

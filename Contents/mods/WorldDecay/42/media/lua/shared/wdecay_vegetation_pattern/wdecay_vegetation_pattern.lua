@@ -8,7 +8,7 @@ local WDecay_Random = require('wdecay_random/wdecay_random')
 local HASH_MODULUS = 104729
 local FERTILITY_MIN = 0.55
 local FERTILITY_RANGE = 0.90
-local SCALE_TILES = { [1] = 16, [2] = 48, [3] = 120, [4] = 0, [5] = 4 }
+local SCALE_TILES = { [1] = 0, [2] = 4, [3] = 16, [4] = 48, [5] = 120 }
 local cachedScale = nil
 local cachedDistribution = nil
 
@@ -28,7 +28,7 @@ end
 local function getScaleTiles()
     if cachedScale ~= nil then return cachedScale end
     local option = getSandboxOptions():getOptionByName('WDecay.vegetationPatternScale')
-    local value = option and option:getValue() or 4
+    local value = option and option:getValue() or 1
     cachedScale = SCALE_TILES[value] or 0
     return cachedScale
 end
@@ -36,12 +36,12 @@ end
 local function getDistribution()
     if cachedDistribution ~= nil then return cachedDistribution end
     local option = getSandboxOptions():getOptionByName('WDecay.vegetationPatternDistribution')
-    cachedDistribution = option and option:getValue() or 3
+    cachedDistribution = option and option:getValue() or 1
     return cachedDistribution
 end
 
 local function fertilityFor(seedValue, distribution)
-    if distribution ~= 2 then
+    if distribution ~= 3 then
         return FERTILITY_MIN + seedValue * FERTILITY_RANGE
     end
 
@@ -66,7 +66,7 @@ function WDecay_VegetationPattern.getMultiplierAt(worldX, worldY)
     local scale = getScaleTiles()
     local distribution = getDistribution()
     -- Disabled exactly reproduces the old white-noise density rolls.
-    if scale == 0 or distribution == 3 then return 1 end
+    if scale == 0 or distribution == 1 then return 1 end
     local px, py = worldX / scale, worldY / scale
     local cellX, cellY = math.floor(px), math.floor(py)
     local nearestDistance, secondDistance = nil, nil
@@ -111,7 +111,7 @@ function WDecay_VegetationPattern.getMultiplierForCheck(square, checkResult)
 end
 
 function WDecay_VegetationPattern.isEnabled()
-    return getScaleTiles() ~= 0 and getDistribution() ~= 3
+    return getScaleTiles() ~= 0 and getDistribution() ~= 1
 end
 
 function WDecay_VegetationPattern.adjustPercentage(square, percentage, checkResult)
